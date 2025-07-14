@@ -1,0 +1,6 @@
+Flask
+gunicorn
+psycopg2-binary
+openpyxl
+werkzeug
+click
