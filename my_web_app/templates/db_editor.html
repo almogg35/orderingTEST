@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>資料庫編輯後台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="//unpkg.com/alpinejs" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">資料庫編輯後台</h1>
+            <a href="{{ url_for('admin_dashboard') }}" class="flex items-center mt-2 sm:mt-0 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i data-lucide="arrow-left" class="mr-2 h-5 w-5"></i> 返回管理員後台
+            </a>
+        </header>
+
+        <div x-data="{ tab: 'products' }">
+            <div class="border-b border-gray-200 dark:border-gray-700">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button @click="tab = 'products'" :class="{ 'border-indigo-500 text-indigo-600 dark:text-indigo-400': tab === 'products', 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 hover:border-gray-300': tab !== 'products' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">商品</button>
+                    <button @click="tab = 'categories'" :class="{ 'border-indigo-500 text-indigo-600 dark:text-indigo-400': tab === 'categories', 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 hover:border-gray-300': tab !== 'categories' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">類別</button>
+                    <button @click="tab = 'customers'" :class="{ 'border-indigo-500 text-indigo-600 dark:text-indigo-400': tab === 'customers', 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 hover:border-gray-300': tab !== 'customers' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">店家</button>
+                    <button @click="tab = 'suppliers'" :class="{ 'border-indigo-500 text-indigo-600 dark:text-indigo-400': tab === 'suppliers', 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100 hover:border-gray-300': tab !== 'suppliers' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">廠商</button>
+                </nav>
+            </div>
+
+            <div class="mt-6">
+                <div x-show="tab === 'products'" id="products-content"></div>
+                <div x-show="tab === 'categories'" id="categories-content"></div>
+                <div x-show="tab === 'customers'" id="customers-content"></div>
+                <div x-show="tab === 'suppliers'" id="suppliers-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="add_product_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+            <h3 class="text-lg font-bold mb-4">新增商品</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label for="add_barcode" class="block text-sm font-medium">條碼 (必填)</label>
+                        <div class="flex items-center space-x-2">
+                             <button id="download_svg_btn" type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>SVG檔下載</button>
+                             <button id="generate_barcode_btn" type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">產生條碼</button>
+                        </div>
+                    </div>
+                    <input type="text" id="add_barcode" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700">
+                    <div class="mt-2 text-center bg-white p-2 rounded-md" style="display: none;" id="barcode_image_container">
+                         <svg id="barcode_image"></svg>
+                    </div>
+                </div>
+                <div><label for="add_name_chinese" class="block text-sm font-medium">中文名稱</label><input type="text" id="add_name_chinese" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="add_name" class="block text-sm font-medium">原始名稱 (必填)</label><input type="text" id="add_name" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="add_category_id" class="block text-sm font-medium">商品類別</label><select id="add_category_id" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></select></div>
+                <div><label for="add_purchase_price" class="block text-sm font-medium">進貨價</label><input type="number" id="add_purchase_price" value="0.0" step="0.1" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="add_selling_price" class="block text-sm font-medium">銷售價</label><input type="number" id="add_selling_price" value="0.0" step="0.1" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button data-action="close-modal" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">取消</button>
+                <button data-action="save-new-product" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存新增</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit_product_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+            <h3 class="text-lg font-bold mb-4">編輯商品資料</h3>
+            <div class="space-y-4">
+                <div><label class="block text-sm font-medium">條碼 (不可修改)</label><input type="text" id="edit_barcode" class="mt-1 block w-full bg-gray-200 dark:bg-gray-600 rounded-md p-2" readonly></div>
+                <div><label for="edit_name_chinese" class="block text-sm font-medium">中文名稱</label><input type="text" id="edit_name_chinese" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="edit_name" class="block text-sm font-medium">原始名稱</label><input type="text" id="edit_name" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="edit_category_id" class="block text-sm font-medium">商品類別</label><select id="edit_category_id" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></select></div>
+                <div><label for="edit_description" class="block text-sm font-medium">商品描述</label><textarea id="edit_description" rows="3" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></textarea></div>
+                <div><label for="edit_stock" class="block text-sm font-medium">目前庫存</label><input type="number" id="edit_stock" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="edit_purchase_price" class="block text-sm font-medium">進貨價</label><input type="number" id="edit_purchase_price" step="0.1" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div><label for="edit_selling_price" class="block text-sm font-medium">銷售價</label><input type="number" id="edit_selling_price" step="0.1" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button data-action="close-modal" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">取消</button>
+                <button data-action="save-product" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存更新</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="partner_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+            <h3 id="partner_modal_title" class="text-lg font-bold mb-4"></h3>
+            <div class="space-y-4">
+                <input type="hidden" id="partner_id"><input type="hidden" id="partner_type">
+                <div><label for="partner_name" class="block text-sm font-medium">名稱</label><input type="text" id="partner_name" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                <div id="customer_fields_container" style="display: none;">
+                    <div><label for="customer_username" class="block text-sm font-medium">客戶帳號</label><input type="text" id="customer_username" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                    <div id="password_field_container" style="display: none;"><label for="customer_password" class="block text-sm font-medium">密碼</label><input type="password" id="customer_password" placeholder="新增時必須填寫" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button data-action="close-modal" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">取消</button>
+                <button data-action="save-partner" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="category_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+            <h3 id="category_modal_title" class="text-lg font-bold mb-4"></h3>
+            <div class="space-y-4">
+                <input type="hidden" id="category_id">
+                <div><label for="category_name" class="block text-sm font-medium">類別名稱</label><input type="text" id="category_name" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button data-action="close-modal" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">取消</button>
+                <button data-action="save-category" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">儲存</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const state = { products: [], customers: [], suppliers: [], categories: [] };
+            const addProductModal = document.getElementById('add_product_modal');
+            const editProductModal = document.getElementById('edit_product_modal');
+            const partnerModal = document.getElementById('partner_modal');
+            const categoryModal = document.getElementById('category_modal');
+
+            // DOM Elements for Modals
+            const addBarcode = document.getElementById('add_barcode'), addNameChinese = document.getElementById('add_name_chinese'), addName = document.getElementById('add_name'), addCategoryId = document.getElementById('add_category_id'), addPurchasePrice = document.getElementById('add_purchase_price'), addSellingPrice = document.getElementById('add_selling_price');
+            const editBarcode = document.getElementById('edit_barcode'), editNameChinese = document.getElementById('edit_name_chinese'), editName = document.getElementById('edit_name'), editCategoryId = document.getElementById('edit_category_id'), editDescription = document.getElementById('edit_description'), editStock = document.getElementById('edit_stock'), editPurchasePrice = document.getElementById('edit_purchase_price'), editSellingPrice = document.getElementById('edit_selling_price');
+            const partnerModalTitle = document.getElementById('partner_modal_title'), partnerIdInput = document.getElementById('partner_id'), partnerTypeInput = document.getElementById('partner_type'), partnerNameInput = document.getElementById('partner_name'), customerFieldsContainer = document.getElementById('customer_fields_container'), customerUsernameInput = document.getElementById('customer_username'), customerPasswordInput = document.getElementById('customer_password'), passwordFieldContainer = document.getElementById('password_field_container');
+            const categoryModalTitle = document.getElementById('category_modal_title'), categoryIdInput = document.getElementById('category_id'), categoryNameInput = document.getElementById('category_name');
+            // 【主要修改】取得條碼產生與下載相關元素
+            const generateBarcodeBtn = document.getElementById('generate_barcode_btn');
+            const downloadSvgBtn = document.getElementById('download_svg_btn');
+            const barcodeImageContainer = document.getElementById('barcode_image_container');
+            const barcodeImage = document.getElementById('barcode_image');
+
+            async function apiRequest(url, options = {}) {
+                try {
+                    const response = await fetch(url, options);
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) { throw new Error(result.error || `HTTP 錯誤: ${response.status}`); }
+                    return result;
+                } catch (error) {
+                    console.error('API Request Error:', error);
+                    alert(`操作失敗: ${error.message}`);
+                    return null;
+                }
+            }
+
+            async function renderTable(type) {
+                const data = await apiRequest(`/api/db/${type}`);
+                if (!data) return;
+                state[type] = data;
+                let headers, rows, addButtonHTML = '';
+                const container = document.getElementById(`${type}-content`);
+                
+                if (type === 'products') {
+                    addButtonHTML = `<div class="mb-4"><button data-action="add-product" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">新增商品</button></div>`;
+                    headers = ["條碼", "中文名", "原始名", "類別", "描述", "庫存", "進貨價", "銷售價", "操作"];
+                    rows = data.map((item, index) => {
+                        const safeDescription = item.description || '';
+                        const truncatedDescription = safeDescription.length > 20 ? safeDescription.substring(0, 20) + '...' : safeDescription;
+                        const category = state.categories.find(c => c.id === item.category_id);
+                        return `<tr class="border-b dark:border-gray-700">
+                                    <td class="p-3 font-mono">${item.barcode}</td>
+                                    <td class="p-3">${item.name_chinese || ''}</td>
+                                    <td class="p-3">${item.name}</td>
+                                    <td class="p-3">${category ? category.name : '未分類'}</td>
+                                    <td class="p-3 text-sm text-gray-500 dark:text-gray-400" title="${safeDescription}">${truncatedDescription}</td>
+                                    <td class="p-3">${item.current_stock}</td>
+                                    <td class="p-3">${item.purchase_price.toFixed(2)}</td>
+                                    <td class="p-3">${item.selling_price.toFixed(2)}</td>
+                                    <td class="p-3 space-x-2">
+                                        <button data-action="edit-product" data-type="products" data-index="${index}" class="text-indigo-400 hover:underline">編輯</button>
+                                        <button data-action="delete-product" data-type="products" data-index="${index}" class="text-red-400 hover:underline">刪除</button>
+                                    </td>
+                                </tr>`;
+                    }).join('');
+                } else if (type === 'categories') { 
+                    addButtonHTML = `<div class="mb-4"><button data-action="add-category" data-type="categories" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">新增類別</button></div>`;
+                    headers = ["ID", "類別名稱", "操作"];
+                    rows = data.map((item, index) => `<tr class="border-b dark:border-gray-700"><td class="p-3">${item.id}</td><td class="p-3">${item.name}</td><td class="p-3 space-x-2 whitespace-nowrap"><button data-action="edit-category" data-type="${type}" data-index="${index}" class="text-indigo-400 hover:underline">編輯</button><button data-action="delete-category" data-type="${type}" data-index="${index}" class="text-red-400 hover:underline">刪除</button></td></tr>`).join('');
+                } else {
+                    const isCustomer = type === 'customers';
+                    const typeName = isCustomer ? '店家' : '廠商';
+                    addButtonHTML = `<div class="mb-4"><button data-action="add-partner" data-type="${type}" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">新增${typeName}</button></div>`;
+                    headers = isCustomer ? ["ID", "店家名稱", "客戶帳號", "狀態", "操作"] : ["ID", "廠商名稱", "狀態", "操作"];
+                    rows = data.map((item, index) => `<tr class="border-b dark:border-gray-700 ${item.status === 'inactive' ? 'text-gray-500' : ''}"><td class="p-3">${item.id}</td><td class="p-3">${item.name}</td>${isCustomer ? `<td class="p-3">${item.username || ''}</td>` : ''}<td class="p-3"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${item.status === 'active' ? '啟用中' : '已停用'}</span></td><td class="p-3 space-x-2 whitespace-nowrap"><button data-action="edit-partner" data-type="${type}" data-index="${index}" class="text-indigo-400 hover:underline">編輯</button><button data-action="toggle-status" data-type="${type}" data-index="${index}" class="text-yellow-500 hover:underline">切換狀態</button><button data-action="delete-partner" data-type="${type}" data-index="${index}" class="text-red-400 hover:underline">刪除</button>${isCustomer ? `<button data-action="reset-password" data-type="${type}" data-index="${index}" class="text-purple-500 hover:underline">重設密碼</button>` : ''}</td></tr>`).join('');
+                }
+                
+                container.innerHTML = `${addButtonHTML}<div class="overflow-x-auto bg-white dark:bg-gray-700 rounded-lg shadow"><table class="min-w-full text-left text-sm"><thead class="border-b dark:border-gray-600"><tr>${headers.map(h => `<th class="p-3 font-semibold">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+                if (window.lucide) { window.lucide.createIcons(); }
+            }
+
+            function populateCategorySelect(selectElement, selectedId) {
+                selectElement.innerHTML = '<option value="">-- 未分類 --</option>';
+                state.categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;
+                    option.textContent = cat.name;
+                    if (cat.id == selectedId) {
+                        option.selected = true;
+                    }
+                    selectElement.appendChild(option);
+                });
+            }
+
+            function openAddProductModal() {
+                addBarcode.value = ''; addNameChinese.value = ''; addName.value = '';
+                addPurchasePrice.value = '0.0'; addSellingPrice.value = '0.0';
+                populateCategorySelect(addCategoryId, null);
+
+                // 隱藏並清空舊的條碼圖片，並禁用下載按鈕
+                barcodeImage.innerHTML = '';
+                barcodeImageContainer.style.display = 'none';
+                downloadSvgBtn.disabled = true;
+
+                addProductModal.classList.remove('hidden');
+                setTimeout(() => addBarcode.focus(), 100); 
+            }
+            function openEditProductModal(product) { 
+                editBarcode.value = product.barcode; editNameChinese.value = product.name_chinese || ''; 
+                editName.value = product.name || ''; editDescription.value = product.description || '';
+                editStock.value = product.current_stock; editPurchasePrice.value = product.purchase_price; 
+                editSellingPrice.value = product.selling_price;
+                populateCategorySelect(editCategoryId, product.category_id);
+                editProductModal.classList.remove('hidden'); 
+            }
+            function openPartnerModal(type, data = null) { const isCustomer = type === 'customers'; const typeName = isCustomer ? '店家' : '廠商'; partnerTypeInput.value = type; partnerIdInput.value = ''; partnerNameInput.value = ''; customerUsernameInput.value = ''; customerPasswordInput.value = ''; if (data) { partnerModalTitle.textContent = `編輯${typeName}`; partnerIdInput.value = data.id; partnerNameInput.value = data.name; customerFieldsContainer.style.display = isCustomer ? 'block' : 'none'; passwordFieldContainer.style.display = 'none'; if (isCustomer) customerUsernameInput.value = data.username || ''; } else { partnerModalTitle.textContent = `新增${typeName}`; customerFieldsContainer.style.display = isCustomer ? 'block' : 'none'; passwordFieldContainer.style.display = isCustomer ? 'block' : 'none'; } partnerModal.classList.remove('hidden'); }
+            function openCategoryModal(data = null) {
+                if (data) {
+                    categoryModalTitle.textContent = '編輯類別';
+                    categoryIdInput.value = data.id;
+                    categoryNameInput.value = data.name;
+                } else {
+                    categoryModalTitle.textContent = '新增類別';
+                    categoryIdInput.value = '';
+                    categoryNameInput.value = '';
+                }
+                categoryModal.classList.remove('hidden');
+            }
+            function closeModal(modal) {
+                if(modal) {
+                     modal.classList.add('hidden');
+                     // 關閉新增商品 modal 時也清除條碼並禁用下載按鈕
+                     if (modal.id === 'add_product_modal') {
+                        barcodeImage.innerHTML = '';
+                        barcodeImageContainer.style.display = 'none';
+                        downloadSvgBtn.disabled = true;
+                    }
+                }
+            }
+
+            async function saveNewProductAction() {
+                const payload = {
+                    barcode: addBarcode.value.trim(), name: addName.value.trim(), name_chinese: addNameChinese.value.trim(),
+                    purchase_price: parseFloat(addPurchasePrice.value), selling_price: parseFloat(addSellingPrice.value),
+                    category_id: addCategoryId.value ? parseInt(addCategoryId.value) : null
+                };
+                if (!payload.barcode || !payload.name) { alert('條碼和原始名稱為必填項目！'); return; }
+                const result = await apiRequest('/api/product/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (result) { alert('商品新增成功！'); closeModal(addProductModal); renderTable('products'); }
+            }
+            async function saveProductAction() { 
+                const payload = { 
+                    barcode: editBarcode.value, name: editName.value.trim(), name_chinese: editNameChinese.value.trim(), 
+                    description: editDescription.value.trim(), current_stock: parseInt(editStock.value), 
+                    purchase_price: parseFloat(editPurchasePrice.value), selling_price: parseFloat(editSellingPrice.value),
+                    category_id: editCategoryId.value ? parseInt(editCategoryId.value) : null
+                }; 
+                const result = await apiRequest('/api/db/product/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
+                if (result) { alert('商品更新成功！'); closeModal(editProductModal); renderTable('products'); } 
+            }
+            async function savePartnerAction() { const id = partnerIdInput.value; const type = partnerTypeInput.value; const isCustomer = type === 'customers'; let payload = { type, name: partnerNameInput.value.trim() }; let url; if (isCustomer) payload.username = customerUsernameInput.value.trim(); if (id) { payload.id = id; url = '/api/partner/update'; } else { url = '/api/partner/add'; if (isCustomer) { payload.password = customerPasswordInput.value; if (!payload.password) { alert('新增店家時，密碼為必填項。'); return; } } } if (!payload.name || (isCustomer && !payload.username)) { alert('名稱' + (isCustomer ? '和帳號' : '') + '為必填項。'); return; } const result = await apiRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (result) { alert(`資料已${id ? '更新' : '新增'}！`); closeModal(partnerModal); renderTable(type); } }
+            async function saveCategoryAction() {
+                const id = categoryIdInput.value;
+                const payload = { name: categoryNameInput.value.trim() };
+                let url;
+                if (id) { payload.id = id; url = '/api/db/category/update'; } else { url = '/api/db/category/add'; }
+                if (!payload.name) { alert('類別名稱為必填項。'); return; }
+                const result = await apiRequest(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                if (result) { 
+                    alert(`類別已${id ? '更新' : '新增'}！`); 
+                    closeModal(categoryModal);
+                    await loadInitialData(); 
+                }
+            }
+
+            function generateAndDisplayBarcode() {
+                const prefix = "200";
+                let randomPart = '';
+                for (let i = 0; i < 9; i++) {
+                    randomPart += Math.floor(Math.random() * 10);
+                }
+                const twelveDigits = prefix + randomPart;
+
+                let sumOdd = 0;
+                let sumEven = 0;
+                for (let i = 0; i < 12; i++) {
+                    const digit = parseInt(twelveDigits[i]);
+                    if ((i + 1) % 2 !== 0) { 
+                        sumOdd += digit;
+                    } else { 
+                        sumEven += digit;
+                    }
+                }
+                const totalSum = sumOdd + (sumEven * 3);
+                const checkDigit = (10 - (totalSum % 10)) % 10;
+                const finalBarcode = twelveDigits + checkDigit;
+
+                addBarcode.value = finalBarcode;
+
+                try {
+                    JsBarcode("#barcode_image", finalBarcode, {
+                        format: "EAN13",
+                        displayValue: true, 
+                        fontSize: 16,
+                        textMargin: 0,
+                        width: 2,         
+                        height: 60,       
+                        margin: 10
+                    });
+                    barcodeImageContainer.style.display = 'block'; 
+                    downloadSvgBtn.disabled = false; // 【主要修改】啟用下載按鈕
+                } catch(e) {
+                    console.error("JsBarcode error:", e);
+                    alert("條碼產生失敗，請檢查瀏覽器控制台錯誤。");
+                    downloadSvgBtn.disabled = true; // 保持禁用
+                }
+            }
+
+            // 【主要修改】下載 SVG 檔案的函式
+            function downloadBarcodeSVG() {
+                const barcodeValue = addBarcode.value.trim();
+                if (!barcodeValue || !barcodeImage.innerHTML.includes('<rect')) {
+                    alert("請先產生條碼後再下載。");
+                    return;
+                }
+
+                const svgElement = barcodeImage.cloneNode(true);
+                svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                const svgData = svgElement.outerHTML;
+                const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `barcode-${barcodeValue}.svg`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+            
+            // 為按鈕加上監聽事件
+            generateBarcodeBtn.addEventListener('click', generateAndDisplayBarcode);
+            downloadSvgBtn.addEventListener('click', downloadBarcodeSVG); // 【主要修改】
+
+
+            document.body.addEventListener('click', async (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+                const action = target.dataset.action; if (!action) return;
+                
+                let type = target.dataset.type;
+                if (!type) {
+                    if (action.includes('product')) type = 'products';
+                    if (action.includes('category')) type = 'categories';
+                }
+                const index = target.dataset.index;
+                const item = (type && index != null) ? state[type]?.[index] : null;
+
+                switch(action) {
+                    // Product actions
+                    case 'add-product': openAddProductModal(); break;
+                    case 'save-new-product': await saveNewProductAction(); break;
+                    case 'edit-product': if(item) openEditProductModal(item); break;
+                    case 'save-product': await saveProductAction(); break;
+                    case 'delete-product': if(item && confirm(`確定要永久刪除商品 '${item.name}' (${item.barcode}) 嗎？\n此操作無法復原。`)) { const result = await apiRequest('/api/db/product/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ barcode: item.barcode }) }); if (result) { alert('商品已刪除！'); renderTable('products'); } } break;
+                    // Partner actions
+                    case 'add-partner': openPartnerModal(type); break;
+                    case 'edit-partner': if(item) openPartnerModal(type, item); break;
+                    case 'save-partner': await savePartnerAction(); break;
+                    case 'delete-partner': if(item && confirm(`確定要永久刪除 '${item.name}' 嗎？\n此操作無法復原。`)) { const result = await apiRequest('/api/partner/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, id: item.id }) }); if (result) { alert('項目已刪除！'); renderTable(type); } } break;
+                    case 'toggle-status': if(item && confirm('確定要切換此項目的狀態嗎？')) { const result = await apiRequest('/api/partner/toggle_status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, id: item.id }) }); if (result) { alert('狀態已更新！'); renderTable(type); } } break;
+                    case 'reset-password': if(item) { const newPassword = prompt(`請為店家 '${item.name}' 設定新密碼:`); if (newPassword) { const result = await apiRequest('/api/db/customer/reset_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, password: newPassword }) }); if (result) alert(`密碼已成功重設！`); } } break;
+                    // Category actions
+                    case 'add-category': openCategoryModal(); break;
+                    case 'edit-category': if(item) openCategoryModal(item); break;
+                    case 'save-category': await saveCategoryAction(); break;
+                    case 'delete-category': if(item && confirm(`確定要刪除類別 '${item.name}' 嗎？\n相關商品的類別將被設為未分類。`)) { const result = await apiRequest('/api/db/category/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) }); if (result) { alert('類別已刪除！'); await loadInitialData(); } } break;
+                    // Modal close action
+                    case 'close-modal': closeModal(target.closest('.fixed')); break;
+                }
+            });
+
+            async function loadInitialData() {
+                await renderTable('categories');
+                await renderTable('products');
+                await renderTable('customers');
+                await renderTable('suppliers');
+            }
+            loadInitialData();
+        });
+    </script>
+</body>
+</html>

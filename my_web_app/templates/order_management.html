@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>訂單管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+    <div id="app-container" class="container mx-auto p-4 md:p-8">
+        <header class="flex flex-wrap justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">訂單管理</h1>
+            <a href="{{ url_for('admin_dashboard') }}" class="flex items-center mt-2 sm:mt-0 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <i data-lucide="arrow-left" class="mr-2 h-5 w-5"></i> 返回管理員後台
+            </a>
+        </header>
+
+        <main>
+            <div class="bg-white dark:bg-gray-700 rounded-lg shadow-md overflow-x-auto">
+                <table class="min-w-full">
+                    <thead class="bg-gray-200 dark:bg-gray-900">
+                        <tr>
+                            <th class="p-3 text-left">訂單ID</th>
+                            <th class="p-3 text-left">訂購日期</th>
+                            <th class="p-3 text-left">客戶名稱</th>
+                            <th class="p-3 text-right">總金額</th>
+                            <th class="p-3 text-center">狀態</th>
+                            <th class="p-3 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-tbody">
+                        </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <div id="details-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-2xl m-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-title" class="text-xl font-bold">訂單明細</h3>
+                <button id="modal-close-btn" class="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+                    <i data-lucide="x" class="h-6 w-6"></i>
+                </button>
+            </div>
+            <div id="modal-body" class="max-h-[60vh] overflow-y-auto">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const ordersTbody = document.getElementById('orders-tbody');
+            const detailsModal = document.getElementById('details-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalBody = document.getElementById('modal-body');
+            const modalCloseBtn = document.getElementById('modal-close-btn');
+
+            // --- 狀態顏色與文字對應 ---
+            const statusMap = {
+                '待處理': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+                '已出貨': 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
+                '已完成': 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+                '已取消': 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'
+            };
+            const statusOptions = ['待處理', '已出貨', '已完成', '已取消'];
+
+            // --- API 請求函式 ---
+            async function apiRequest(url, options = {}) {
+                try {
+                    const response = await fetch(url, options);
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(result.error || `HTTP 錯誤: ${response.status}`);
+                    }
+                    return result;
+                } catch (error) {
+                    alert(`操作失敗: ${error.message}`);
+                    return null;
+                }
+            }
+
+            // --- 渲染訂單列表 ---
+            async function renderOrders() {
+                ordersTbody.innerHTML = '<tr><td colspan="6" class="text-center p-8">載入中...</td></tr>';
+                const orders = await apiRequest('/api/orders');
+                if (!orders) {
+                    ordersTbody.innerHTML = '<tr><td colspan="6" class="text-center p-8 text-red-500">無法載入訂單資料。</td></tr>';
+                    return;
+                }
+                if (orders.length === 0) {
+                    ordersTbody.innerHTML = '<tr><td colspan="6" class="text-center p-8 text-gray-500">目前沒有任何訂單。</td></tr>';
+                    return;
+                }
+
+                ordersTbody.innerHTML = '';
+                orders.forEach(order => {
+                    const statusClass = statusMap[order.status] || 'bg-gray-100 text-gray-800';
+                    const selectOptions = statusOptions.map(opt => 
+                        `<option value="${opt}" ${order.status === opt ? 'selected' : ''}>${opt}</option>`
+                    ).join('');
+
+                    const row = document.createElement('tr');
+                    row.className = 'border-b dark:border-gray-700';
+                    row.innerHTML = `
+                        <td class="p-3 font-mono">#${order.id}</td>
+                        <td class="p-3">${new Date(order.order_date).toLocaleString('zh-TW')}</td>
+                        <td class="p-3">${order.customer_name}</td>
+                        <td class="p-3 text-right">$${order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</td>
+                        <td class="p-3 text-center">
+                            <select data-action="change-status" data-order-id="${order.id}" class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 p-1 ${statusClass}">
+                                ${selectOptions}
+                            </select>
+                        </td>
+                        <td class="p-3 text-center">
+                            <button data-action="view-details" data-order-id="${order.id}" class="text-indigo-600 dark:text-indigo-400 hover:underline">
+                                查看明細
+                            </button>
+                        </td>
+                    `;
+                    ordersTbody.appendChild(row);
+                });
+            }
+            
+            // --- 事件委派處理 ---
+            document.body.addEventListener('click', async (e) => {
+                const button = e.target.closest('button');
+                if (!button) return;
+                
+                const action = button.dataset.action;
+                if (action === 'view-details') {
+                    const orderId = button.dataset.orderId;
+                    modalTitle.textContent = `訂單 #${orderId} 明細`;
+                    modalBody.innerHTML = '<p>載入中...</p>';
+                    detailsModal.classList.remove('hidden');
+
+                    const details = await apiRequest(`/api/orders/${orderId}`);
+                    if(details) {
+                        let detailsHtml = '<table class="min-w-full">';
+                        detailsHtml += '<thead class="bg-gray-100 dark:bg-gray-600"><tr><th class="p-2 text-left">品名</th><th class="p-2 text-right">數量</th><th class="p-2 text-right">單價</th><th class="p-2 text-right">小計</th></tr></thead><tbody>';
+                        details.forEach(item => {
+                            detailsHtml += `<tr class="border-b dark:border-gray-600">
+                                <td class="p-2">${item.product_name}</td>
+                                <td class="p-2 text-right">${item.quantity}</td>
+                                <td class="p-2 text-right">$${item.price_at_order.toFixed(2)}</td>
+                                <td class="p-2 text-right">$${(item.quantity * item.price_at_order).toFixed(2)}</td>
+                            </tr>`;
+                        });
+                        detailsHtml += '</tbody></table>';
+                        modalBody.innerHTML = detailsHtml;
+                    } else {
+                        modalBody.innerHTML = '<p class="text-red-500">無法載入訂單明細。</p>';
+                    }
+                }
+            });
+
+            ordersTbody.addEventListener('change', async (e) => {
+                const target = e.target;
+                if (target.dataset.action === 'change-status') {
+                    const orderId = target.dataset.orderId;
+                    const newStatus = target.value;
+                    if (confirm(`確定要將訂單 #${orderId} 的狀態更新為「${newStatus}」嗎？`)) {
+                        const result = await apiRequest('/api/orders/update_status', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ order_id: orderId, status: newStatus })
+                        });
+                        if (result && result.success) {
+                            alert('狀態更新成功！');
+                            target.className = `rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 p-1 ${statusMap[newStatus] || 'bg-gray-100 text-gray-800'}`;
+                        } else {
+                            // 如果更新失敗，重新載入整個列表以還原選項
+                            renderOrders();
+                        }
+                    } else {
+                        // 如果取消，也重新載入列表還原選項
+                        renderOrders();
+                   }
+                }
+            });
+
+            // --- 關閉 Modal ---
+            modalCloseBtn.addEventListener('click', () => detailsModal.classList.add('hidden'));
+
+            // --- 初始載入 ---
+            renderOrders();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
