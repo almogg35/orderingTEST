@@ -73,6 +73,7 @@ def convert_records_timezone(records, time_key='timestamp'):
         converted_records.append(record_dict)
     return converted_records
 
+# 請將您舊的 login 函式完整替換為此版本
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -94,7 +95,15 @@ def login():
             
         try:
             conn = get_db_connection()
-            customer = conn.execute('SELECT * FROM customers WHERE username = %s AND status = "active"', (username,)).fetchone()
+            # 修正 1：建立 cursor 物件，並使用 DictCursor 讓回傳結果像字典
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor) 
+            
+            # 修正 2：使用 cursor 來執行指令，並修正 SQL 字串中的引號
+            cursor.execute("SELECT * FROM customers WHERE username = %s AND status = %s", (username, 'active'))
+            customer = cursor.fetchone()
+            
+            # 修正 3：使用完畢後關閉 cursor 和 connection
+            cursor.close()
             conn.close()
             
             if customer and customer['password'] and check_password_hash(customer['password'], password):
@@ -106,7 +115,8 @@ def login():
             else:
                 flash('使用者名稱或密碼錯誤。', 'danger')
                 return redirect(url_for('login'))
-        except sqlite3.Error as e:
+        # 修正 4：捕捉 psycopg2 的錯誤，而不是 sqlite3 的錯誤
+        except psycopg2.Error as e: 
             print(f"Login database error: {e}")
             flash('資料庫發生錯誤，請聯繫管理員。', 'danger')
             return redirect(url_for('login'))
