@@ -17,6 +17,18 @@ from datetime import datetime, timezone, timedelta
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_default_dev_secret_key_change_me_in_production')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_default_dev_secret_key_change_me_in_production')
+# 🔽🔽🔽 請將以下整個區塊複製並貼上 🔽🔽🔽
+try:
+    # 使用 app_context 確保在 Flask 環境中執行
+    with app.app_context():
+        print("應用程式啟動：正在嘗試執行一次性資料庫初始化...")
+        setup_database() # 執行我們建立資料表的函式
+        print("資料庫初始化函式執行完畢。")
+except Exception as e:
+    # 如果資料表已存在，這裡會報錯，但我們的目的是建立它，所以可以忽略這個錯誤。
+    # 這個 try...except 區塊可以防止應用程式因為資料表已存在而崩潰。
+    print(f"資料庫初始化時發生錯誤（可忽略，通常表示資料表已存在）：{e}")
+# 🔼🔼🔼 請將以上整個區塊複製並貼上 🔼🔼🔼
 
 # 【主要修改】資料庫連線函式
 def get_db_connection():
