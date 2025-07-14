@@ -3,6 +3,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response
 # 【主要修改】移除 sqlite3，引入 psycopg2 和 os，以及 click
 import psycopg2 
+import psycopg2.extras
 import os
 import io
 import csv
