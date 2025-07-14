@@ -63,16 +63,6 @@ def convert_records_timezone(records, time_key='timestamp'):
         converted_records.append(record_dict)
     return converted_records
 
-# 4. 【臨時】一次性的初始化區塊
-# ==================================
-try:
-    with app.app_context():
-        print("應用程式啟動：正在嘗試執行一次性資料庫初始化...")
-        setup_database()
-        print("資料庫初始化函式執行完畢。")
-except Exception as e:
-    print(f"資料庫初始化時發生錯誤（可忽略，通常表示資料表已存在）：{e}")
-
 # 5. 設定 app 的 secret key
 # ==================================
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'a_very_secret_key_that_should_be_changed')
