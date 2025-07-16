@@ -687,17 +687,24 @@ def fulfill_order():
         cursor.close()
         if conn: conn.close()
 
+# 請將您舊的 get_transaction_report 函式完整替換為此版本
 @app.route('/api/reports/transactions', methods=['POST'])
 def get_transaction_report():
-    if session.get('user_type') != 'admin': return jsonify({'error': 'Unauthorized'}), 403
+    if session.get('user_type') != 'admin': 
+        return jsonify({'error': 'Unauthorized'}), 403
+    
     try:
         data = request.json
         start_date = data.get('start_date')
         end_date = data.get('end_date')
-        if not start_date or not end_date: return jsonify({'error': '請提供開始與結束日期'}), 400
+        
+        if not start_date or not end_date: 
+            return jsonify({'error': '請提供開始與結束日期'}), 400
+            
         end_date_full = f"{end_date} 23:59:59"
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        
         query = """
             SELECT
                 t.timestamp, t.type, p.name_chinese, p.name, t.barcode,
@@ -710,14 +717,23 @@ def get_transaction_report():
             LEFT JOIN suppliers s ON t.supplier_id = s.id
             WHERE t.timestamp BETWEEN %s AND %s ORDER BY t.timestamp DESC
         """
+        
         cursor.execute(query, (start_date, end_date_full))
         transactions = cursor.fetchall()
         cursor.close()
         conn.close()
         
-        report_data_with_timezone = convert_records_timezone(transactions, time_key='timestamp')
+        # 【主要修改】簡化資料處理邏輯
+        # 1. 先轉換時區
+        report_data = convert_records_timezone(transactions, time_key='timestamp')
         
-        return jsonify(report_data_with_timezone)
+        # 2. 直接在處理好的資料上新增 'product_name' 欄位
+        for row in report_data:
+            # 使用 .get() 更安全，並提供一個備用名稱以防萬一
+            row['product_name'] = row.get('name_chinese') or row.get('name') or 'N/A'
+        
+        return jsonify(report_data)
+        
     except Exception as e:
         print(f"Report generation error: {e}")
         return jsonify({'error': '產生報表時發生未知伺服器錯誤'}), 500
