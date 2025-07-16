@@ -812,3 +812,49 @@ def export_xlsx_report():
         print(f"Excel export error: {e}")
         return Response("伺服器匯出錯誤", status=500)
 
+# 請將此函式新增到 app.py 的最下方
+@app.route('/api/transaction/delete', methods=['POST'])
+def delete_transaction():
+    if session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    data = request.json
+    transaction_id = data.get('transaction_id')
+    if not transaction_id:
+        return jsonify({'success': False, 'error': '缺少交易ID'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        # 步驟 1: 找出這筆交易的詳細資訊 (類型、數量、條碼)
+        cursor.execute("SELECT type, quantity, barcode FROM transactions WHERE id = %s", (transaction_id,))
+        transaction = cursor.fetchone()
+
+        if not transaction:
+            return jsonify({'success': False, 'error': '找不到該筆交易紀錄'}), 404
+
+        # 步驟 2: 根據交易類型，計算要還原的庫存數量
+        # 如果是進貨('IN')，刪除時就要減少庫存
+        # 如果是出貨('OUT')，刪除時就要加回庫存
+        stock_adjustment = -transaction['quantity'] if transaction['type'] == 'IN' else transaction['quantity']
+        
+        # 步驟 3: 更新 products 資料表的庫存
+        cursor.execute("UPDATE products SET current_stock = current_stock + %s WHERE barcode = %s",
+                       (stock_adjustment, transaction['barcode']))
+        
+        # 步驟 4: 從 transactions 資料表刪除這筆紀錄
+        cursor.execute("DELETE FROM transactions WHERE id = %s", (transaction_id,))
+        
+        # 步驟 5: 提交事務，讓以上所有變更生效
+        conn.commit()
+        
+        return jsonify({'success': True, 'message': f'交易 #{transaction_id} 已成功刪除並還原庫存。'})
+
+    except psycopg2.Error as e:
+        # 如果任何一步出錯，就回滾所有操作
+        conn.rollback()
+        print(f"Delete transaction error: {e}")
+        return jsonify({'success': False, 'error': '刪除操作時發生資料庫錯誤'}), 500
+    finally:
+        cursor.close()
+        if conn: conn.close()
