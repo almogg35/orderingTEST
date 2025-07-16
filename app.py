@@ -705,9 +705,10 @@ def get_transaction_report():
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
+        # 【主要修改】在 SELECT 語句的最前面加上 t.id
         query = """
             SELECT
-                t.timestamp, t.type, p.name_chinese, p.name, t.barcode,
+                t.id, t.timestamp, t.type, p.name_chinese, p.name, t.barcode,
                 t.quantity, t.transaction_price as price,
                 p.purchase_price as product_purchase_price,
                 COALESCE(c.name, s.name, 'N/A') as partner_name
@@ -723,13 +724,9 @@ def get_transaction_report():
         cursor.close()
         conn.close()
         
-        # 【主要修改】簡化資料處理邏輯
-        # 1. 先轉換時區
         report_data = convert_records_timezone(transactions, time_key='timestamp')
         
-        # 2. 直接在處理好的資料上新增 'product_name' 欄位
         for row in report_data:
-            # 使用 .get() 更安全，並提供一個備用名稱以防萬一
             row['product_name'] = row.get('name_chinese') or row.get('name') or 'N/A'
         
         return jsonify(report_data)
