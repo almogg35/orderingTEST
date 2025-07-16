@@ -54,12 +54,10 @@
                             <th class="p-3 text-right">出貨價</th>
                             <th class="p-3 text-right">淨利</th>
                             <th class="p-3 text-left">廠商/店家</th>
-                            <th class="p-3 text-center">操作</th>
-                        </tr>
+                            <th class="p-3 text-center">操作</th> </tr>
                     </thead>
                     <tbody id="report-body">
-                        <tr><td colspan="8" class="text-center p-8 text-gray-500">請選擇日期範圍並產生報表。</td></tr>
-                    </tbody>
+                        <tr><td colspan="9" class="text-center p-8 text-gray-500">請選擇日期範圍並產生報表。</td></tr> </tbody>
                     <tfoot id="report-footer" class="bg-gray-100 dark:bg-gray-800 font-bold">
                     </tfoot>
                 </table>
@@ -91,7 +89,7 @@
             generateBtn.disabled = true;
             btnSpan.textContent = '產生中...';
             
-            reportBody.innerHTML = '<tr><td colspan="8" class="text-center p-8">載入中...</td></tr>';
+            reportBody.innerHTML = '<tr><td colspan="9" class="text-center p-8">載入中...</td></tr>'; // 【修改】colspan 改為 9
             reportFooter.innerHTML = '';
             exportCsvBtn.disabled = true;
             exportXlsxBtn.disabled = true;
@@ -102,8 +100,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ start_date: startDate, end_date: endDate }),
                 });
-
-                // 【主要修改】更強健的錯誤處理
+                
                 if (!response.ok) {
                     let errorMsg = '產生報表失敗';
                     try {
@@ -123,14 +120,13 @@
                 exportXlsxBtn.disabled = !hasData;
 
             } catch (error) {
-                reportBody.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-red-500">${error.message}</td></tr>`;
+                reportBody.innerHTML = `<tr><td colspan="9" class="text-center p-8 text-red-500">${error.message}</td></tr>`; // 【修改】colspan 改為 9
             } finally {
                 generateBtn.disabled = false;
                 btnSpan.textContent = '產生報表';
             }
         });
 
-        // ... 此處其他匯出按鈕的事件監聽無變動 ...
         exportCsvBtn.addEventListener('click', () => {
             if (currentReportData.length === 0) { alert('沒有可匯出的資料。'); return; }
             let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
@@ -189,9 +185,42 @@
             }
         });
 
+        // 【新增】處理刪除事件的監聽
+        reportBody.addEventListener('click', async (e) => {
+            const deleteButton = e.target.closest('button[data-action="delete-transaction"]');
+
+            if (deleteButton) {
+                const transactionId = deleteButton.dataset.transactionId;
+                
+                if (!confirm(`您確定要刪除交易紀錄 #${transactionId} 嗎？\n此操作會還原對應的庫存數量，且無法復原！`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/transaction/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ transaction_id: parseInt(transactionId, 10) })
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || '刪除失敗');
+                    }
+                    
+                    alert(result.message);
+                    generateBtn.click();
+
+                } catch (error) {
+                    alert(`操作失敗: ${error.message}`);
+                }
+            }
+        });
+
         function renderReport(data) {
             if (data.length === 0) {
-                reportBody.innerHTML = '<tr><td colspan="8" class="text-center p-8 text-gray-500">此日期範圍內沒有任何交易紀錄。</td></tr>';
+                reportBody.innerHTML = '<tr><td colspan="9" class="text-center p-8 text-gray-500">此日期範圍內沒有任何交易紀錄。</td></tr>'; // 【修改】colspan 改為 9
                 reportFooter.innerHTML = '';
                 return;
             }
@@ -235,18 +264,16 @@
                     </tr>
                 `;
             });
-
-    // ... (計算總淨利並更新 tfoot 的程式碼不變) ...
-
-    lucide.createIcons(); // 【主要修改】重新渲染 Lucide 圖示
-}
+            
             reportFooter.innerHTML = `
                 <tr>
-                    <td colspan="6" class="p-3 text-right">期間總淨利：</td>
+                    <td colspan="8" class="p-3 text-right">期間總淨利：</td>
                     <td class="p-3 text-right text-xl text-green-600">${totalProfit.toFixed(2)}</td>
                     <td></td>
                 </tr>
             `;
+            // 【修改】重新渲染 Lucide 圖示
+            lucide.createIcons();
         }
 
         lucide.createIcons();
