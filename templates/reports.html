@@ -54,6 +54,7 @@
                             <th class="p-3 text-right">出貨價</th>
                             <th class="p-3 text-right">淨利</th>
                             <th class="p-3 text-left">廠商/店家</th>
+                            <th class="p-3 text-center">操作</th>
                         </tr>
                     </thead>
                     <tbody id="report-body">
@@ -225,10 +226,20 @@
                         <td class="p-3 text-right">${selling_price > 0 ? selling_price.toFixed(2) : '-'}</td>
                         <td class="p-3 text-right font-bold ${net_profit > 0 ? 'text-green-600' : ''}">${net_profit > 0 ? net_profit.toFixed(2) : '-'}</td>
                         <td class="p-3">${row.partner_name}</td>
+                        <td class="p-3 text-center">
+                            <button data-action="delete-transaction" data-transaction-id="${row.id}"
+                                    class="text-red-500 hover:text-red-700 transition-colors" title="刪除此筆紀錄">
+                                <i data-lucide="trash-2" class="pointer-events-none h-5 w-5"></i>
+                            </button>
+                        </td>
                     </tr>
                 `;
             });
-            
+
+    // ... (計算總淨利並更新 tfoot 的程式碼不變) ...
+
+    lucide.createIcons(); // 【主要修改】重新渲染 Lucide 圖示
+}
             reportFooter.innerHTML = `
                 <tr>
                     <td colspan="6" class="p-3 text-right">期間總淨利：</td>
