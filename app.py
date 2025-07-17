@@ -316,21 +316,26 @@ def submit_order():
         cursor.close()
         if conn: conn.close()
 
+# 請將您舊的 get_table_data 函式完整替換為此版本
 @app.route('/api/db/<table>')
 def get_table_data(table):
     if session.get('user_type') != 'admin': return jsonify({'error': 'Unauthorized'}), 403
     if table not in ['products', 'customers', 'suppliers', 'categories']: return jsonify({'error': 'Invalid table'}), 400
+    
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         if table == 'products':
-                # 將排序基準從 name_chinese 改為 barcode，並將其轉換為數字進行排序
-            cursor.execute(f'SELECT * FROM {table} ORDER BY CAST(barcode AS BIGINT)')
-            data = cursor.fetchall()
+            # 【主要修改】使用更安全的排序方法，將非數字條碼排在後面
+            # 語法解釋：CASE WHEN barcode ~ '^[0-9]+$' THEN 1 ELSE 2 END 會讓純數字的排在第一組
+            # THEN CAST(barcode AS BIGINT) 會對純數字的進行數字排序
+            cursor.execute(f"SELECT * FROM {table} ORDER BY CASE WHEN barcode ~ '^[0-9]+$' THEN 1 ELSE 2 END, CASE WHEN barcode ~ '^[0-9]+$' THEN CAST(barcode AS BIGINT) ELSE 0 END")
         else:
             cursor.execute(f'SELECT * FROM {table} ORDER BY id')
+        
         data = cursor.fetchall()
         return jsonify([dict(row) for row in data])
+        
     except psycopg2.Error as e:
         print(f"Error fetching table {table}: {e}")
         return jsonify({'error': f'讀取資料表 {table} 失敗'}), 500
@@ -734,13 +739,23 @@ def get_transaction_report():
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
-        # 【主要修改】在 SELECT 語句的最前面加上 t.id
+        # 【主要修改】直接在 SQL 中計算好進貨價、出貨價和淨利
         query = """
             SELECT
-                t.id, t.timestamp, t.type, p.name_chinese, p.name, t.barcode,
-                t.quantity, t.transaction_price as price,
-                p.purchase_price as product_purchase_price,
-                COALESCE(c.name, s.name, 'N/A') as partner_name
+                t.id,
+                t.timestamp,
+                t.type,
+                t.quantity,
+                p.name_chinese,
+                p.name,
+                t.barcode,
+                COALESCE(c.name, s.name, 'N/A') as partner_name,
+                -- 如果是進貨('IN')，進貨價就是交易價，否則為 0
+                CASE WHEN t.type = 'IN' THEN t.transaction_price ELSE 0 END AS purchase_price,
+                -- 如果是出貨('OUT')，出貨價就是交易價，否則為 0
+                CASE WHEN t.type = 'OUT' THEN t.transaction_price ELSE 0 END AS selling_price,
+                -- 如果是出貨('OUT')，計算淨利，否則為 0
+                CASE WHEN t.type = 'OUT' THEN (t.transaction_price - p.purchase_price) * t.quantity ELSE 0 END AS net_profit
             FROM transactions t
             LEFT JOIN products p ON t.barcode = p.barcode
             LEFT JOIN customers c ON t.customer_id = c.id
