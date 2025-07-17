@@ -100,6 +100,7 @@
                             <table class="min-w-full"><thead class="sticky top-0 bg-gray-200 dark:bg-gray-900"><tr>
                                 <th class="p-3 text-left">訂單ID</th><th class="p-3 text-left">客戶</th>
                                 <th class="p-3 text-left">訂購日期</th><th class="p-3 text-right">品項/總數</th>
+                                <th class="p-3 text-right">訂單總額</th>
                             </tr></thead><tbody id="pending-orders-tbody"></tbody></table>
                         </div>
                     </div>
@@ -120,6 +121,7 @@
                         <div class="h-64 overflow-y-auto border dark:border-gray-600 rounded-md">
                             <table class="min-w-full"><thead class="sticky top-0 bg-gray-200 dark:bg-gray-900"><tr>
                                 <th class="p-2 text-left">品名</th><th class="p-2 text-left">條碼</th>
+                                <th class="p-2 text-center">單價</th>
                                 <th class="p-2 text-center">狀態 (已掃/應掃)</th><th class="p-2 text-center">庫存</th>
                             </tr></thead><tbody id="fulfillment-tbody"></tbody></table>
                         </div>
@@ -152,7 +154,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM Elements ---
+        // --- DOM Elements (無變動) ---
         const modeSelectionDiv = document.getElementById('mode-selection');
         const inboundModeDiv = document.getElementById('inbound-mode');
         const outboundOrderSelectionModeDiv = document.getElementById('outbound-order-selection-mode');
@@ -164,32 +166,31 @@
         const lastScannedFulfill = document.getElementById('last-scanned-item-fulfillment');
         const completeFulfillBtn = document.getElementById('complete-fulfillment-btn');
         const logArea = document.getElementById('log-area');
-        // Inbound elements
         const supplierSelect = document.getElementById('supplier-select');
-        const inboundCategorySelect = document.getElementById('inbound-category-select'); // 【主要修改】取得類別選擇器元素
+        const inboundCategorySelect = document.getElementById('inbound-category-select'); 
         const inboundBarcodeInp = document.getElementById('inbound-barcode-input');
         const lastScannedInbound = document.getElementById('last-scanned-item-inbound');
         const inboundTbody = document.getElementById('inbound-tbody');
         const completeInboundBtn = document.getElementById('complete-inbound-btn');
-        // Announcement elements
         const announcementText = document.getElementById('announcement-text');
         const saveAnnouncementBtn = document.getElementById('save-announcement-btn');
 
 
-        // --- App State ---
+        // --- App State (fulfillmentState 新增 adjustedPrices) ---
         let inboundState = {
             scanTimer: null,
             selectedSupplierId: null,
-            selectedCategoryId: 'all', // 【主要修改】新增類別狀態，預設為'all'
-            items: new Map() // { barcode: { name, name_chinese, quantity } }
+            selectedCategoryId: 'all',
+            items: new Map() 
         };
         let fulfillmentState = {
             scanTimer: null,
-            currentOrder: null, // {id, customer_id, customer_name, items: Map}
-            scannedItems: new Map() // {barcode: scanned_quantity}
+            currentOrder: null, 
+            scannedItems: new Map(),
+            adjustedPrices: new Map() // 【主要修改】用來儲存調整後的價格
         };
 
-        // --- Functions ---
+        // --- Functions (無變動) ---
         const addLog = (message, isError = false) => {
             const now = new Date().toLocaleString('zh-TW', { hour12: false });
             const color = isError ? 'text-red-400' : 'text-green-400';
@@ -202,7 +203,7 @@
             document.getElementById(viewId)?.classList.remove('hidden');
         };
 
-        // --- Announcement Functions ---
+        // --- Announcement Functions (無變動) ---
         const loadAnnouncement = async () => {
             try {
                 const response = await fetch('/api/announcement');
@@ -236,12 +237,12 @@
             }
         };
 
-        // --- Inbound Functions ---
+        // --- Inbound Functions (無變動) ---
         const loadSuppliers = async () => {
             supplierSelect.innerHTML = '<option value="">請選擇供應商...</option>';
             try {
                 const response = await fetch('/api/partners/suppliers');
-                const suppliers = await response.json(); //
+                const suppliers = await response.json();
                 suppliers.forEach(s => {
                     const option = document.createElement('option');
                     option.value = s.id;
@@ -253,12 +254,11 @@
             }
         };
         
-        // 【主要修改】新增載入類別的函式
         const loadCategories = async () => {
             inboundCategorySelect.innerHTML = '<option value="all">所有類別</option>';
             try {
                 const response = await fetch('/api/db/categories');
-                const categories = await response.json(); //
+                const categories = await response.json();
                 categories.forEach(c => {
                     const option = document.createElement('option');
                     option.value = c.id;
@@ -276,11 +276,11 @@
             inboundState.selectedCategoryId = 'all';
             lastScannedInbound.textContent = '[尚未掃描]';
             inboundBarcodeInp.disabled = true;
-            inboundCategorySelect.disabled = true; //
+            inboundCategorySelect.disabled = true; 
             inboundBarcodeInp.placeholder = '選擇供應商後開始掃描...';
             inboundBarcodeInp.value = '';
             loadSuppliers();
-            loadCategories(); // 【主要修改】呼叫載入類別函式
+            loadCategories(); 
             renderInboundList();
             showView('inbound-mode');
         };
@@ -321,10 +321,9 @@
 
             try {
                 const response = await fetch(`/api/product/${barcode}`);
-                const product = await response.json(); //
+                const product = await response.json();
                 if (!response.ok) throw new Error(product.error);
 
-                // 【主要修改】檢查商品類別是否符合所選
                 if (inboundState.selectedCategoryId !== 'all' && product.category_id != inboundState.selectedCategoryId) {
                     throw new Error(`商品 '${product.name_chinese || product.name}' 不屬於所選的類別`);
                 }
@@ -381,14 +380,14 @@
             }
         };
 
-        // --- Outbound & Fulfillment Functions (no changes) ---
+        // --- Outbound & Fulfillment Functions (有修改) ---
         const loadPendingOrders = async () => {
-            pendingOrdersTbody.innerHTML = '<tr><td colspan="4" class="text-center p-4">載入中...</td></tr>';
+            pendingOrdersTbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">載入中...</td></tr>'; // 【主要修改】colspan=5
             try {
                 const orders = await (await fetch('/api/pending_orders')).json();
                 pendingOrdersTbody.innerHTML = '';
                 if(orders.length === 0) {
-                    pendingOrdersTbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-gray-500">沒有待處理的訂單</td></tr>';
+                    pendingOrdersTbody.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-gray-500">沒有待處理的訂單</td></tr>';
                     return;
                 }
                 orders.forEach(order => {
@@ -397,17 +396,19 @@
                     row.dataset.orderId = order.id;
                     row.dataset.customerId = order.customer_id;
                     row.dataset.customerName = order.customer_name;
+                    // 【主要修改】顯示 total_amount
                     row.innerHTML = `
                         <td class="p-3 font-mono">#${order.id}</td>
                         <td class="p-3">${order.customer_name}</td>
                         <td class="p-3">${new Date(order.order_date).toLocaleDateString()}</td>
                         <td class="p-3 text-right">${order.item_count} 品項 / ${order.total_quantity} 件</td>
+                        <td class="p-3 text-right font-semibold">${(order.total_amount || 0).toFixed(2)}</td>
                     `;
                     pendingOrdersTbody.appendChild(row);
                 });
             } catch (error) {
                 addLog('載入待出貨訂單失敗', true);
-                pendingOrdersTbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-red-500">載入失敗</td></tr>';
+                pendingOrdersTbody.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-red-500">載入失敗</td></tr>';
             }
         };
 
@@ -419,6 +420,12 @@
                     items: new Map(details.map(item => [item.barcode, item]))
                 };
                 fulfillmentState.scannedItems.clear();
+                fulfillmentState.adjustedPrices.clear(); // 【主要修改】清空舊的價格紀錄
+                // 【主要修改】將原始價格存入 adjustedPrices
+                details.forEach(item => {
+                    fulfillmentState.adjustedPrices.set(item.barcode, item.price_at_order);
+                });
+
                 fulfillmentTitle.textContent = `訂單 #${orderId} - ${customerName}`;
                 renderFulfillmentList();
                 showView('fulfillment-mode');
@@ -439,9 +446,15 @@
                 const row = document.createElement('tr');
                 row.id = `fulfill-row-${barcode}`;
                 row.className = `border-b dark:border-gray-700 ${isComplete ? 'bg-green-100 dark:bg-green-900/50' : ''}`;
+                // 【主要修改】加入可編輯的價格輸入框
                 row.innerHTML = `
                     <td class="p-2">${item.name_chinese || item.name}</td>
                     <td class="p-2 font-mono">${barcode}</td>
+                    <td class="p-2 text-center">
+                        <input type="number" value="${fulfillmentState.adjustedPrices.get(barcode).toFixed(2)}" 
+                               data-barcode="${barcode}" step="0.01"
+                               class="price-input w-24 text-center bg-gray-100 dark:bg-gray-600 rounded-md p-1 border dark:border-gray-500">
+                    </td>
                     <td class="p-2 text-center font-bold text-lg">${scannedQty} / ${item.required_quantity}</td>
                     <td class="p-2 text-center ${item.current_stock < item.required_quantity ? 'text-red-500' : ''}">${item.current_stock}</td>
                 `;
@@ -466,14 +479,14 @@
             const scannedQty = fulfillmentState.scannedItems.get(barcode) || 0;
 
             if(scannedQty >= itemInfo.required_quantity) {
-                lastScannedFulfill.textContent = `警告：${itemInfo.name_chinese || item.name} 已揀貨完畢！`;
+                lastScannedFulfill.textContent = `警告：${itemInfo.name_chinese || itemInfo.name} 已揀貨完畢！`;
                 addLog(`警告：商品 ${barcode} 已達訂單數量`, true);
                 fulfillBarcodeInp.value = '';
                 return;
             }
             
             fulfillmentState.scannedItems.set(barcode, scannedQty + 1);
-            lastScannedFulfill.textContent = `已掃描: ${itemInfo.name_chinese || item.name}`;
+            lastScannedFulfill.textContent = `已掃描: ${itemInfo.name_chinese || itemInfo.name}`;
             renderFulfillmentList();
             
             const row = document.getElementById(`fulfill-row-${barcode}`);
@@ -487,10 +500,15 @@
         const completeFulfillment = async () => {
             if(!confirm(`確定要完成訂單 #${fulfillmentState.currentOrder.id} 的出貨作業嗎？`)) return;
 
+            // 【主要修改】建立 payload 時，包含調整後的價格
             const payload = {
                 order_id: fulfillmentState.currentOrder.id,
                 customer_id: fulfillmentState.currentOrder.customerId,
-                fulfilled_items: Array.from(fulfillmentState.scannedItems.entries()).map(([barcode, quantity]) => ({ barcode, quantity }))
+                fulfilled_items: Array.from(fulfillmentState.scannedItems.entries()).map(([barcode, quantity]) => ({
+                    barcode,
+                    quantity,
+                    adjusted_price: fulfillmentState.adjustedPrices.get(barcode)
+                }))
             };
             
             try {
@@ -500,7 +518,7 @@
                     body: JSON.stringify(payload)
                 });
                 const result = await response.json();
-                if(!response.ok) throw new Error(result.error);
+                if(!response.ok) throw new Error(result.error || '出貨失敗');
                 
                 alert(result.message);
                 addLog(result.message);
@@ -512,7 +530,7 @@
             }
         };
 
-        // --- Event Listeners ---
+        // --- Event Listeners (有新增) ---
         saveAnnouncementBtn.addEventListener('click', saveAnnouncement);
 
         document.getElementById('start-inbound-btn').addEventListener('click', startInbound);
@@ -530,24 +548,20 @@
             showView('outbound-order-selection-mode');
         });
 
-        // Inbound listeners
+        // Inbound listeners (無變動)
         supplierSelect.addEventListener('change', () => {
             const selectedId = supplierSelect.value;
             inboundState.selectedSupplierId = selectedId ? selectedId : null;
             const isSupplierSelected = !!selectedId;
-            
-            // 【主要修改】同時控制類別選擇器和條碼輸入框的啟用狀態
             inboundCategorySelect.disabled = !isSupplierSelected;
             inboundBarcodeInp.disabled = !isSupplierSelected;
             inboundBarcodeInp.placeholder = isSupplierSelected ? '可以開始掃描商品' : '選擇供應商後開始掃描...';
-            
             if (isSupplierSelected) {
                 inboundBarcodeInp.focus();
             }
             renderInboundList();
         });
 
-        // 【主要修改】為類別選擇器新增事件監聽
         inboundCategorySelect.addEventListener('change', () => {
             inboundState.selectedCategoryId = inboundCategorySelect.value;
             addLog(`進貨類別已變更為: ${inboundCategorySelect.options[inboundCategorySelect.selectedIndex].text}`);
@@ -604,6 +618,21 @@
         });
 
         completeFulfillBtn.addEventListener('click', completeFulfillment);
+        
+        // 【主要修改】新增監聽價格變動的事件
+        fulfillmentTbody.addEventListener('change', e => {
+            if (e.target.classList.contains('price-input')) {
+                const barcode = e.target.dataset.barcode;
+                const newPrice = parseFloat(e.target.value);
+                if (!isNaN(newPrice) && newPrice >= 0) {
+                    fulfillmentState.adjustedPrices.set(barcode, newPrice);
+                    addLog(`商品 ${barcode} 價格已更新為 ${newPrice.toFixed(2)}`);
+                } else {
+                    // 如果輸入無效，恢復原價
+                    e.target.value = fulfillmentState.adjustedPrices.get(barcode).toFixed(2);
+                }
+            }
+        });
 
         // --- Initial Load ---
         lucide.createIcons();
