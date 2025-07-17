@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
     <div class="container mx-auto p-4 md:p-8">
@@ -41,19 +40,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md m-4">
             <h3 class="text-lg font-bold mb-4">新增商品</h3>
             <div class="space-y-4">
-                <div>
-                    <div class="flex justify-between items-center">
-                        <label for="add_barcode" class="block text-sm font-medium">條碼 (必填)</label>
-                        <div class="flex items-center space-x-2">
-                             <button id="download_svg_btn" type="button" class="text-xs px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>SVG檔下載</button>
-                             <button id="generate_barcode_btn" type="button" class="text-xs px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">產生條碼</button>
-                        </div>
-                    </div>
-                    <input type="text" id="add_barcode" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700">
-                    <div class="mt-2 text-center bg-white p-2 rounded-md" style="display: none;" id="barcode_image_container">
-                         <svg id="barcode_image"></svg>
-                    </div>
-                </div>
+                <div><label for="add_barcode" class="block text-sm font-medium">條碼 (必填)</label><input type="text" id="add_barcode" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
                 <div><label for="add_name_chinese" class="block text-sm font-medium">中文名稱</label><input type="text" id="add_name_chinese" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
                 <div><label for="add_name" class="block text-sm font-medium">原始名稱 (必填)</label><input type="text" id="add_name" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></div>
                 <div><label for="add_category_id" class="block text-sm font-medium">商品類別</label><select id="add_category_id" class="mt-1 block w-full rounded-md p-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"></select></div>
@@ -118,6 +105,22 @@
             </div>
         </div>
     </div>
+    
+    <div id="history_modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-3xl m-4 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="history_modal_title" class="text-xl font-bold">商品歷史紀錄</h3>
+                <button data-action="close-modal" class="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+                    <i data-lucide="x" class="h-6 w-6 pointer-events-none"></i>
+                </button>
+            </div>
+            <div id="history_modal_body" class="max-h-[60vh] overflow-y-auto">
+                </div>
+            <div class="mt-6 text-right">
+                 <button data-action="close-modal" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">關閉</button>
+            </div>
+        </div>
+    </div>
 
 
     <script>
@@ -127,17 +130,17 @@
             const editProductModal = document.getElementById('edit_product_modal');
             const partnerModal = document.getElementById('partner_modal');
             const categoryModal = document.getElementById('category_modal');
+            // 【新增】取得歷史紀錄 Modal 相關元素
+            const historyModal = document.getElementById('history_modal');
+            const historyModalTitle = document.getElementById('history_modal_title');
+            const historyModalBody = document.getElementById('history_modal_body');
 
-            // DOM Elements for Modals
+            // DOM Elements for Modals (Add/Edit Product)
             const addBarcode = document.getElementById('add_barcode'), addNameChinese = document.getElementById('add_name_chinese'), addName = document.getElementById('add_name'), addCategoryId = document.getElementById('add_category_id'), addPurchasePrice = document.getElementById('add_purchase_price'), addSellingPrice = document.getElementById('add_selling_price');
             const editBarcode = document.getElementById('edit_barcode'), editNameChinese = document.getElementById('edit_name_chinese'), editName = document.getElementById('edit_name'), editCategoryId = document.getElementById('edit_category_id'), editDescription = document.getElementById('edit_description'), editStock = document.getElementById('edit_stock'), editPurchasePrice = document.getElementById('edit_purchase_price'), editSellingPrice = document.getElementById('edit_selling_price');
+            // DOM Elements for Modals (Partner/Category)
             const partnerModalTitle = document.getElementById('partner_modal_title'), partnerIdInput = document.getElementById('partner_id'), partnerTypeInput = document.getElementById('partner_type'), partnerNameInput = document.getElementById('partner_name'), customerFieldsContainer = document.getElementById('customer_fields_container'), customerUsernameInput = document.getElementById('customer_username'), customerPasswordInput = document.getElementById('customer_password'), passwordFieldContainer = document.getElementById('password_field_container');
             const categoryModalTitle = document.getElementById('category_modal_title'), categoryIdInput = document.getElementById('category_id'), categoryNameInput = document.getElementById('category_name');
-            // 【主要修改】取得條碼產生與下載相關元素
-            const generateBarcodeBtn = document.getElementById('generate_barcode_btn');
-            const downloadSvgBtn = document.getElementById('download_svg_btn');
-            const barcodeImageContainer = document.getElementById('barcode_image_container');
-            const barcodeImage = document.getElementById('barcode_image');
 
             async function apiRequest(url, options = {}) {
                 try {
@@ -175,7 +178,8 @@
                                     <td class="p-3">${item.current_stock}</td>
                                     <td class="p-3">${item.purchase_price.toFixed(2)}</td>
                                     <td class="p-3">${item.selling_price.toFixed(2)}</td>
-                                    <td class="p-3 space-x-2">
+                                    <td class="p-3 space-x-2 whitespace-nowrap">
+                                        <button data-action="view-history" data-barcode="${item.barcode}" data-name="${item.name_chinese || item.name}" class="text-blue-400 hover:underline">歷史</button>
                                         <button data-action="edit-product" data-type="products" data-index="${index}" class="text-indigo-400 hover:underline">編輯</button>
                                         <button data-action="delete-product" data-type="products" data-index="${index}" class="text-red-400 hover:underline">刪除</button>
                                     </td>
@@ -214,12 +218,6 @@
                 addBarcode.value = ''; addNameChinese.value = ''; addName.value = '';
                 addPurchasePrice.value = '0.0'; addSellingPrice.value = '0.0';
                 populateCategorySelect(addCategoryId, null);
-
-                // 隱藏並清空舊的條碼圖片，並禁用下載按鈕
-                barcodeImage.innerHTML = '';
-                barcodeImageContainer.style.display = 'none';
-                downloadSvgBtn.disabled = true;
-
                 addProductModal.classList.remove('hidden');
                 setTimeout(() => addBarcode.focus(), 100); 
             }
@@ -244,17 +242,7 @@
                 }
                 categoryModal.classList.remove('hidden');
             }
-            function closeModal(modal) {
-                if(modal) {
-                     modal.classList.add('hidden');
-                     // 關閉新增商品 modal 時也清除條碼並禁用下載按鈕
-                     if (modal.id === 'add_product_modal') {
-                        barcodeImage.innerHTML = '';
-                        barcodeImageContainer.style.display = 'none';
-                        downloadSvgBtn.disabled = true;
-                    }
-                }
-            }
+            function closeModal(modal) { if(modal) modal.classList.add('hidden'); }
 
             async function saveNewProductAction() {
                 const payload = {
@@ -291,76 +279,6 @@
                 }
             }
 
-            function generateAndDisplayBarcode() {
-                const prefix = "200";
-                let randomPart = '';
-                for (let i = 0; i < 9; i++) {
-                    randomPart += Math.floor(Math.random() * 10);
-                }
-                const twelveDigits = prefix + randomPart;
-
-                let sumOdd = 0;
-                let sumEven = 0;
-                for (let i = 0; i < 12; i++) {
-                    const digit = parseInt(twelveDigits[i]);
-                    if ((i + 1) % 2 !== 0) { 
-                        sumOdd += digit;
-                    } else { 
-                        sumEven += digit;
-                    }
-                }
-                const totalSum = sumOdd + (sumEven * 3);
-                const checkDigit = (10 - (totalSum % 10)) % 10;
-                const finalBarcode = twelveDigits + checkDigit;
-
-                addBarcode.value = finalBarcode;
-
-                try {
-                    JsBarcode("#barcode_image", finalBarcode, {
-                        format: "EAN13",
-                        displayValue: true, 
-                        fontSize: 16,
-                        textMargin: 0,
-                        width: 2,         
-                        height: 60,       
-                        margin: 10
-                    });
-                    barcodeImageContainer.style.display = 'block'; 
-                    downloadSvgBtn.disabled = false; // 【主要修改】啟用下載按鈕
-                } catch(e) {
-                    console.error("JsBarcode error:", e);
-                    alert("條碼產生失敗，請檢查瀏覽器控制台錯誤。");
-                    downloadSvgBtn.disabled = true; // 保持禁用
-                }
-            }
-
-            // 【主要修改】下載 SVG 檔案的函式
-            function downloadBarcodeSVG() {
-                const barcodeValue = addBarcode.value.trim();
-                if (!barcodeValue || !barcodeImage.innerHTML.includes('<rect')) {
-                    alert("請先產生條碼後再下載。");
-                    return;
-                }
-
-                const svgElement = barcodeImage.cloneNode(true);
-                svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                const svgData = svgElement.outerHTML;
-                const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `barcode-${barcodeValue}.svg`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            }
-            
-            // 為按鈕加上監聽事件
-            generateBarcodeBtn.addEventListener('click', generateAndDisplayBarcode);
-            downloadSvgBtn.addEventListener('click', downloadBarcodeSVG); // 【主要修改】
-
-
             document.body.addEventListener('click', async (e) => {
                 const target = e.target.closest('button');
                 if (!target) return;
@@ -375,25 +293,72 @@
                 const item = (type && index != null) ? state[type]?.[index] : null;
 
                 switch(action) {
-                    // Product actions
                     case 'add-product': openAddProductModal(); break;
                     case 'save-new-product': await saveNewProductAction(); break;
                     case 'edit-product': if(item) openEditProductModal(item); break;
                     case 'save-product': await saveProductAction(); break;
                     case 'delete-product': if(item && confirm(`確定要永久刪除商品 '${item.name}' (${item.barcode}) 嗎？\n此操作無法復原。`)) { const result = await apiRequest('/api/db/product/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ barcode: item.barcode }) }); if (result) { alert('商品已刪除！'); renderTable('products'); } } break;
-                    // Partner actions
+                    
                     case 'add-partner': openPartnerModal(type); break;
                     case 'edit-partner': if(item) openPartnerModal(type, item); break;
                     case 'save-partner': await savePartnerAction(); break;
                     case 'delete-partner': if(item && confirm(`確定要永久刪除 '${item.name}' 嗎？\n此操作無法復原。`)) { const result = await apiRequest('/api/partner/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, id: item.id }) }); if (result) { alert('項目已刪除！'); renderTable(type); } } break;
                     case 'toggle-status': if(item && confirm('確定要切換此項目的狀態嗎？')) { const result = await apiRequest('/api/partner/toggle_status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, id: item.id }) }); if (result) { alert('狀態已更新！'); renderTable(type); } } break;
                     case 'reset-password': if(item) { const newPassword = prompt(`請為店家 '${item.name}' 設定新密碼:`); if (newPassword) { const result = await apiRequest('/api/db/customer/reset_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, password: newPassword }) }); if (result) alert(`密碼已成功重設！`); } } break;
-                    // Category actions
+                    
                     case 'add-category': openCategoryModal(); break;
                     case 'edit-category': if(item) openCategoryModal(item); break;
                     case 'save-category': await saveCategoryAction(); break;
                     case 'delete-category': if(item && confirm(`確定要刪除類別 '${item.name}' 嗎？\n相關商品的類別將被設為未分類。`)) { const result = await apiRequest('/api/db/category/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id }) }); if (result) { alert('類別已刪除！'); await loadInitialData(); } } break;
-                    // Modal close action
+                    
+                    case 'view-history':
+                        const barcode = target.dataset.barcode;
+                        const productName = target.dataset.name;
+                        
+                        historyModalTitle.textContent = `商品歷史紀錄 - ${productName} (${barcode})`;
+                        historyModalBody.innerHTML = '<p class="text-center p-8">載入中...</p>';
+                        historyModal.classList.remove('hidden');
+
+                        const historyData = await apiRequest(`/api/product/history/${barcode}`);
+                        if (historyData) {
+                            if (historyData.length === 0) {
+                                historyModalBody.innerHTML = '<p class="text-center p-8 text-gray-500">此商品沒有任何進出貨紀錄。</p>';
+                            } else {
+                                let tableHTML = `<table class="min-w-full text-left text-sm">
+                                    <thead class="border-b dark:border-gray-600">
+                                        <tr>
+                                            <th class="p-2 font-semibold">日期時間</th>
+                                            <th class="p-2 font-semibold">類型</th>
+                                            <th class="p-2 font-semibold text-right">數量</th>
+                                            <th class="p-2 font-semibold text-right">單價</th>
+                                            <th class="p-2 font-semibold">廠商/店家</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+                                
+                                historyData.forEach(rec => {
+                                    const is_in = rec.type === 'IN';
+                                    tableHTML += `<tr class="border-b dark:border-gray-700">
+                                        <td class="p-2 whitespace-nowrap">${rec.timestamp}</td>
+                                        <td class="p-2">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${is_in ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}">
+                                                ${is_in ? '進貨' : '出貨'}
+                                            </span>
+                                        </td>
+                                        <td class="p-2 text-right">${rec.quantity}</td>
+                                        <td class="p-2 text-right">${rec.transaction_price.toFixed(2)}</td>
+                                        <td class="p-2">${rec.partner_name}</td>
+                                    </tr>`;
+                                });
+
+                                tableHTML += '</tbody></table>';
+                                historyModalBody.innerHTML = tableHTML;
+                            }
+                        } else {
+                            historyModalBody.innerHTML = '<p class="text-center p-8 text-red-500">無法載入歷史紀錄。</p>';
+                        }
+                        break;
+                    
                     case 'close-modal': closeModal(target.closest('.fixed')); break;
                 }
             });
