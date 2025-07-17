@@ -324,7 +324,9 @@ def get_table_data(table):
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         if table == 'products':
-            cursor.execute(f'SELECT * FROM {table} ORDER BY name_chinese')
+                # 將排序基準從 name_chinese 改為 barcode，並將其轉換為數字進行排序
+            cursor.execute(f'SELECT * FROM {table} ORDER BY CAST(barcode AS BIGINT)')
+            data = cursor.fetchall()
         else:
             cursor.execute(f'SELECT * FROM {table} ORDER BY id')
         data = cursor.fetchall()
@@ -638,12 +640,20 @@ def get_customer_order_details(order_id):
     details_data = [{'product_name': item['name_chinese'] or item['name'], **dict(item)} for item in details]
     return jsonify(details_data)
 
+# 請將您舊的 get_pending_orders 函式完整替換為此版本
 @app.route('/api/pending_orders', methods=['GET'])
 def get_pending_orders():
     if session.get('user_type') != 'admin': return jsonify({'error': 'Unauthorized'}), 403
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    query = "SELECT o.id, o.order_date, c.name as customer_name, c.id as customer_id, (SELECT COUNT(*) FROM order_details od WHERE od.order_id = o.id) as item_count, (SELECT SUM(od.quantity) FROM order_details od WHERE od.order_id = o.id) as total_quantity FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status = '待處理' ORDER BY o.order_date ASC"
+    # 【主要修改】在 SELECT 中新增 o.total_amount
+    query = """
+        SELECT o.id, o.order_date, o.total_amount, c.name as customer_name, c.id as customer_id, 
+               (SELECT COUNT(*) FROM order_details od WHERE od.order_id = o.id) as item_count, 
+               (SELECT SUM(od.quantity) FROM order_details od WHERE od.order_id = o.id) as total_quantity 
+        FROM orders o JOIN customers c ON o.customer_id = c.id 
+        WHERE o.status = '待處理' ORDER BY o.order_date ASC
+    """
     cursor.execute(query)
     orders = cursor.fetchall()
     cursor.close()
@@ -651,31 +661,50 @@ def get_pending_orders():
     orders_data = convert_records_timezone(orders, time_key='order_date')
     return jsonify(orders_data)
 
+# 請將您舊的 get_order_fulfillment_details 函式完整替換為此版本
 @app.route('/api/order_fulfillment_details/<int:order_id>', methods=['GET'])
 def get_order_fulfillment_details(order_id):
     if session.get('user_type') != 'admin': return jsonify({'error': 'Unauthorized'}), 403
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    query = "SELECT od.barcode, od.quantity as required_quantity, p.name, p.name_chinese, p.current_stock FROM order_details od JOIN products p ON od.barcode = p.barcode WHERE od.order_id = %s"
+    # 【主要修改】在 SELECT 中新增 od.price_at_order
+    query = """
+        SELECT od.barcode, od.quantity as required_quantity, od.price_at_order, 
+               p.name, p.name_chinese, p.current_stock 
+        FROM order_details od JOIN products p ON od.barcode = p.barcode 
+        WHERE od.order_id = %s
+    """
     cursor.execute(query, (order_id,))
     details = cursor.fetchall()
     cursor.close()
     conn.close()
     return jsonify([dict(row) for row in details])
 
+# 請將您舊的 fulfill_order 函式完整替換為此版本
 @app.route('/api/fulfill_order', methods=['POST'])
 def fulfill_order():
     if session.get('user_type') != 'admin': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     data = request.json
     order_id, customer_id, fulfilled_items = data.get('order_id'), data.get('customer_id'), data.get('fulfilled_items')
-    if not all([order_id, customer_id, fulfilled_items]): return jsonify({'success': False, 'error': '請求資料不完整'}), 400
+    
+    # 【主要修改】增加對 fulfilled_items 內容的檢查
+    if not all([order_id, customer_id, fulfilled_items and isinstance(fulfilled_items, list)]): 
+        return jsonify({'success': False, 'error': '請求資料不完整'}), 400
+
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:
         for item in fulfilled_items:
-            cursor.execute('SELECT selling_price FROM products WHERE barcode = %s', (item['barcode'],))
-            product_price = cursor.fetchone()['selling_price']
-            cursor.execute("INSERT INTO transactions (barcode, type, quantity, transaction_price, customer_id) VALUES (%s, 'OUT', %s, %s, %s)", (item['barcode'], item['quantity'], product_price, customer_id))
+            # 【主要修改】檢查每項商品是否包含 barcode, quantity, 和 adjusted_price
+            if not all(k in item for k in ['barcode', 'quantity', 'adjusted_price']):
+                return jsonify({'success': False, 'error': '單項出貨商品資料不完整'}), 400
+            
+            # 【主要修改】直接使用前端傳來的 adjusted_price 作為交易價格
+            transaction_price = item['adjusted_price']
+            
+            cursor.execute("INSERT INTO transactions (barcode, type, quantity, transaction_price, customer_id) VALUES (%s, 'OUT', %s, %s, %s)",
+                           (item['barcode'], item['quantity'], transaction_price, customer_id))
+
         cursor.execute("UPDATE orders SET status = '已出貨' WHERE id = %s", (order_id,))
         conn.commit()
         return jsonify({'success': True, 'message': f'訂單 #{order_id} 已成功出貨！'})
