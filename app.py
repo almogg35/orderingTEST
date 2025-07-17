@@ -899,3 +899,44 @@ def delete_transaction():
     finally:
         cursor.close()
         if conn: conn.close()
+
+# 請將此函式新增到 app.py 的最下方
+@app.route('/api/product/history/<barcode>', methods=['GET'])
+def get_product_history(barcode):
+    if session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    if not barcode:
+        return jsonify({'error': '缺少商品條碼'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    try:
+        query = """
+            SELECT
+                t.id,
+                t.timestamp,
+                t.type,
+                t.quantity,
+                t.transaction_price,
+                COALESCE(c.name, s.name, 'N/A') as partner_name
+            FROM transactions t
+            LEFT JOIN customers c ON t.customer_id = c.id
+            LEFT JOIN suppliers s ON t.supplier_id = s.id
+            WHERE t.barcode = %s
+            ORDER BY t.timestamp DESC
+        """
+        cursor.execute(query, (barcode,))
+        history = cursor.fetchall()
+        
+        # 轉換時區
+        history_data = convert_records_timezone(history, time_key='timestamp')
+
+        return jsonify(history_data)
+
+    except psycopg2.Error as e:
+        print(f"Product history fetch error: {e}")
+        return jsonify({'error': '查詢歷史紀錄時發生資料庫錯誤'}), 500
+    finally:
+        cursor.close()
+        if conn: conn.close()
