@@ -190,13 +190,21 @@
             adjustedPrices: new Map() // 【主要修改】用來儲存調整後的價格
         };
 
-        // --- Functions (無變動) ---
-        const addLog = (message, isError = false) => {
-            const now = new Date().toLocaleString('zh-TW', { hour12: false });
-            const color = isError ? 'text-red-400' : 'text-green-400';
-            logArea.innerHTML += `<div><span class="${color}">[${now}]</span> ${message}</div>`;
-            logArea.scrollTop = logArea.scrollHeight;
-        };
+// 【主要修改】升級 addLog 函式以使用 sessionStorage
+const addLog = (message, isError = false) => {
+    const now = new Date().toLocaleString('zh-TW', { hour12: false });
+    const color = isError ? 'text-red-400' : 'text-green-400';
+    const logEntryHTML = `<div><span class="${color}">[${now}]</span> ${message}</div>`;
+
+    // 1. 更新畫面
+    logArea.innerHTML += logEntryHTML;
+    logArea.scrollTop = logArea.scrollHeight;
+
+    // 2. 將新的日誌內容存入 sessionStorage
+    // 先讀取舊的紀錄，再加上新的紀錄
+    const currentLogs = sessionStorage.getItem('adminLog') || '';
+    sessionStorage.setItem('adminLog', currentLogs + logEntryHTML);
+};
         
         const showView = (viewId) => {
             [modeSelectionDiv, inboundModeDiv, outboundOrderSelectionModeDiv, fulfillmentModeDiv].forEach(div => div.classList.add('hidden'));
@@ -539,6 +547,14 @@
             showView('outbound-order-selection-mode');
         });
 
+        // 【主要修改】為登出按鈕增加清除日誌的功能
+        const logoutLink = document.querySelector('a[href="{{ url_for(\'logout\') }}"]');
+        if(logoutLink) {
+            logoutLink.addEventListener('click', () => {
+                sessionStorage.removeItem('adminLog');
+            });
+        }
+
         document.querySelectorAll('.back-to-selection-btn').forEach(btn => {
             btn.addEventListener('click', () => showView('mode-selection'));
         });
@@ -635,6 +651,20 @@
         });
 
         // --- Initial Load ---
+
+        // 【主要修改】新增載入日誌的邏輯
+       const loadLogs = () => {
+           const savedLogs = sessionStorage.getItem('adminLog');
+           if (savedLogs) {
+               logArea.innerHTML = savedLogs;
+               logArea.scrollTop = logArea.scrollHeight;
+           } else {
+               // 如果沒有儲存的日誌，才顯示初始訊息
+               addLog("管理系統已就緒，請選擇作業模式。");
+           }
+       };
+       loadLogs(); // 載入頁面時執行
+        
         lucide.createIcons();
         loadAnnouncement();
         addLog("管理系統已就緒，請選擇作業模式。");
