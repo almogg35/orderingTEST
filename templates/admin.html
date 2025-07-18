@@ -586,7 +586,7 @@
                 }
             }
         });
-        const logoutLink = document.querySelector('a[href="{{ url_for(\'logout\') }}"]');
+        const logoutLink = document.querySelector('a[href="{{ url_for('logout') }}"]');
         if(logoutLink) {
             logoutLink.addEventListener('click', () => {
                 sessionStorage.removeItem('adminLog');
