@@ -138,7 +138,7 @@
             <div class="space-y-8">
                 <div class="p-6 bg-white dark:bg-gray-700 rounded-lg shadow-md">
                     <h2 class="text-xl font-bold mb-4">系統管理</h2>
-                    <div class="grid grid-cols-1 gap-4">
+                    <div id="management-links" class="grid grid-cols-1 gap-4">
                         <a href="{{ url_for('order_management_page') }}" class="block p-4 text-center bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-lg transition-colors text-blue-800 dark:text-blue-200 font-semibold">訂單管理</a>
                         <a href="{{ url_for('reports_page') }}" class="block p-4 text-center bg-green-100 dark:bg-green-900/50 hover:bg-green-200 dark:hover:bg-green-800 rounded-lg transition-colors text-green-800 dark:text-green-200 font-semibold">報表中心</a>
                         <a href="{{ url_for('db_editor') }}" class="block p-4 text-center bg-yellow-100 dark:bg-yellow-900/50 hover:bg-yellow-200 dark:hover:bg-yellow-800 rounded-lg transition-colors text-yellow-800 dark:text-yellow-200 font-semibold">資料庫編輯</a>
@@ -218,7 +218,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error);
-                addLog(result.message);
+                addLog(`公告已更新`);
                 alert(result.message);
             } catch (error) {
                 addLog(`儲存公告失敗: ${error.message}`, true);
@@ -260,7 +260,7 @@
         };
 
         const startInbound = () => {
-            addLog("進入批次進貨作業模式。"); // 【主要修改】
+            addLog("進入批次進貨作業模式");
             inboundState.items.clear();
             inboundState.selectedSupplierId = null;
             inboundState.selectedCategoryId = 'all';
@@ -390,7 +390,7 @@
         };
 
         const startFulfillment = async (orderId, customerId, customerName) => {
-            addLog(`開始揀貨作業：訂單 #${orderId} - ${customerName}`); // 【主要修改】
+            addLog(`開始揀貨作業：訂單 #${orderId} - ${customerName}`);
             try {
                 const details = await(await fetch(`/api/order_fulfillment_details/${orderId}`)).json();
                 fulfillmentState.currentOrder = {
@@ -501,20 +501,20 @@
         document.getElementById('start-inbound-btn').addEventListener('click', startInbound);
         
         document.getElementById('start-outbound-btn').addEventListener('click', () => {
-            addLog("進入選擇出貨訂單模式。"); // 【主要修改】
+            addLog("進入選擇出貨訂單模式");
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
 
         document.querySelectorAll('.back-to-selection-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                addLog("返回模式選擇。"); // 【主要修改】
+                addLog("返回模式選擇");
                 showView('mode-selection');
             });
         });
         
         document.getElementById('back-to-order-list-btn').addEventListener('click', () => {
-            addLog("返回訂單列表。"); // 【主要修改】
+            addLog("返回訂單列表");
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
@@ -527,7 +527,10 @@
             inboundCategorySelect.disabled = !isSupplierSelected;
             inboundBarcodeInp.disabled = !isSupplierSelected;
             inboundBarcodeInp.placeholder = isSupplierSelected ? '可以開始掃描商品' : '選擇供應商後開始掃描...';
-            if (isSupplierSelected) inboundBarcodeInp.focus();
+            if (isSupplierSelected) {
+                addLog(`已選擇供應商: ${supplierSelect.options[supplierSelect.selectedIndex].text}`);
+                inboundBarcodeInp.focus();
+            }
             renderInboundList();
         });
         inboundCategorySelect.addEventListener('change', () => {
@@ -596,17 +599,24 @@
             }
         });
 
-        // Logout listener
+        // =================================================================
+        // 【主要修改】為系統管理連結加上日誌記錄
+        // =================================================================
+        document.querySelectorAll('#management-links a').forEach(link => {
+            link.addEventListener('click', () => {
+                addLog(`前往頁面: ${link.textContent.trim()}`);
+            });
+        });
+
         const logoutLink = document.querySelector('a[href="{{ url_for('logout') }}"]');
         if(logoutLink) {
             logoutLink.addEventListener('click', () => {
+                addLog("使用者登出");
                 sessionStorage.removeItem('adminLog');
             });
         }
 
-        // =================================================================
-        // 頁面初始載入邏輯
-        // =================================================================
+        // --- Page Initial Load ---
         const initPage = () => {
             const savedLogs = sessionStorage.getItem('adminLog');
             if (savedLogs) {
