@@ -176,35 +176,21 @@
         const saveAnnouncementBtn = document.getElementById('save-announcement-btn');
 
         // --- App State ---
-        let inboundState = {
-            scanTimer: null,
-            selectedSupplierId: null,
-            selectedCategoryId: 'all',
-            items: new Map() 
-        };
-        let fulfillmentState = {
-            scanTimer: null,
-            currentOrder: null, 
-            scannedItems: new Map(),
-            adjustedPrices: new Map()
-        };
+        let inboundState = { scanTimer: null, selectedSupplierId: null, selectedCategoryId: 'all', items: new Map() };
+        let fulfillmentState = { scanTimer: null, currentOrder: null, scannedItems: new Map(), adjustedPrices: new Map() };
 
-        // =================================================================
-        // 【修正】1. 將 addLog 函式獨立定義，使其職責單純
-        // =================================================================
+        // --- Log Functions ---
         const addLog = (message, isError = false) => {
             const now = new Date().toLocaleString('zh-TW', { hour12: false });
             const color = isError ? 'text-red-400' : 'text-green-400';
             const logEntryHTML = `<div><span class="${color}">[${now}]</span> ${message}</div>`;
-            
             logArea.innerHTML += logEntryHTML;
             logArea.scrollTop = logArea.scrollHeight;
-
             const currentLogs = sessionStorage.getItem('adminLog') || '';
             sessionStorage.setItem('adminLog', currentLogs + logEntryHTML);
         };
 
-        // --- Other Functions ---
+        // --- Core Functions ---
         const showView = (viewId) => {
             [modeSelectionDiv, inboundModeDiv, outboundOrderSelectionModeDiv, fulfillmentModeDiv].forEach(div => div.classList.add('hidden'));
             document.getElementById(viewId)?.classList.remove('hidden');
@@ -217,7 +203,7 @@
                 const data = await response.json();
                 announcementText.value = data.announcement || '';
             } catch (error) {
-                console.error(error.message); // 改為 console.error 避免循環呼叫 addLog
+                console.error(error.message);
             }
         };
 
@@ -274,6 +260,7 @@
         };
 
         const startInbound = () => {
+            addLog("進入批次進貨作業模式。"); // 【主要修改】
             inboundState.items.clear();
             inboundState.selectedSupplierId = null;
             inboundState.selectedCategoryId = 'all';
@@ -321,7 +308,6 @@
             const barcode = inboundBarcodeInp.value.trim();
             if (!barcode) return;
             inboundBarcodeInp.disabled = true;
-
             try {
                 const product = await (await fetch(`/api/product/${barcode}`)).json();
                 if (inboundState.selectedCategoryId !== 'all' && product.category_id != inboundState.selectedCategoryId) {
@@ -334,6 +320,7 @@
                     inboundState.items.set(barcode, { name: product.name, name_chinese: product.name_chinese, quantity: 1 });
                     lastScannedInbound.textContent = `新增: ${product.name_chinese || product.name}`;
                 }
+                addLog(`掃描進貨商品: ${product.name_chinese || product.name}`);
                 renderInboundList();
                 document.getElementById(`inbound-row-${barcode}`)?.classList.add('flash-green');
             } catch (error) {
@@ -355,12 +342,13 @@
                 items: Array.from(inboundState.items.entries()).map(([barcode, item]) => ({ barcode, quantity: item.quantity }))
             };
             try {
-                const result = await (await fetch('/api/transaction/batch', {
+                const response = await fetch('/api/transaction/batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                })).json();
-                if (!result.success) throw new Error(result.error);
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
                 alert(result.message);
                 addLog(result.message);
                 showView('mode-selection');
@@ -402,6 +390,7 @@
         };
 
         const startFulfillment = async (orderId, customerId, customerName) => {
+            addLog(`開始揀貨作業：訂單 #${orderId} - ${customerName}`); // 【主要修改】
             try {
                 const details = await(await fetch(`/api/order_fulfillment_details/${orderId}`)).json();
                 fulfillmentState.currentOrder = {
@@ -468,6 +457,7 @@
             }
             fulfillmentState.scannedItems.set(barcode, scannedQty + 1);
             lastScannedFulfill.textContent = `已掃描: ${itemInfo.name_chinese || itemInfo.name}`;
+            addLog(`掃描出貨商品: ${itemInfo.name_chinese || itemInfo.name}`);
             renderFulfillmentList();
             const row = document.getElementById(`fulfill-row-${barcode}`);
             if (row) {
@@ -489,12 +479,13 @@
                 }))
             };
             try {
-                const result = await (await fetch('/api/fulfill_order', {
+                const response = await fetch('/api/fulfill_order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                })).json();
-                if(!result.success) throw new Error(result.error || '出貨失敗');
+                });
+                const result = await response.json();
+                if(!response.ok) throw new Error(result.error || '出貨失敗');
                 alert(result.message);
                 addLog(result.message);
                 showView('mode-selection');
@@ -506,16 +497,29 @@
 
         // --- Event Listeners ---
         saveAnnouncementBtn.addEventListener('click', saveAnnouncement);
+        
         document.getElementById('start-inbound-btn').addEventListener('click', startInbound);
+        
         document.getElementById('start-outbound-btn').addEventListener('click', () => {
+            addLog("進入選擇出貨訂單模式。"); // 【主要修改】
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
-        document.querySelectorAll('.back-to-selection-btn').forEach(btn => btn.addEventListener('click', () => showView('mode-selection')));
+
+        document.querySelectorAll('.back-to-selection-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                addLog("返回模式選擇。"); // 【主要修改】
+                showView('mode-selection');
+            });
+        });
+        
         document.getElementById('back-to-order-list-btn').addEventListener('click', () => {
+            addLog("返回訂單列表。"); // 【主要修改】
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
+
+        // Inbound Listeners
         supplierSelect.addEventListener('change', () => {
             const selectedId = supplierSelect.value;
             inboundState.selectedSupplierId = selectedId || null;
@@ -542,8 +546,11 @@
                 const barcode = e.target.dataset.barcode;
                 const quantity = parseInt(e.target.value, 10);
                 if (inboundState.items.has(barcode)) {
-                    if (quantity > 0) inboundState.items.get(barcode).quantity = quantity;
-                    else inboundState.items.delete(barcode);
+                    if (quantity > 0) {
+                        inboundState.items.get(barcode).quantity = quantity;
+                    } else {
+                         inboundState.items.delete(barcode);
+                    }
                     renderInboundList();
                 }
             }
@@ -560,6 +567,8 @@
             }
         });
         completeInboundBtn.addEventListener('click', completeInbound);
+        
+        // Outbound Listeners
         pendingOrdersTbody.addEventListener('click', e => {
             const row = e.target.closest('.order-row');
             if (row) {
@@ -586,6 +595,8 @@
                 }
             }
         });
+
+        // Logout listener
         const logoutLink = document.querySelector('a[href="{{ url_for('logout') }}"]');
         if(logoutLink) {
             logoutLink.addEventListener('click', () => {
@@ -594,7 +605,7 @@
         }
 
         // =================================================================
-        // 【修正】2. 這是頁面初始載入時唯一要執行的區塊
+        // 頁面初始載入邏輯
         // =================================================================
         const initPage = () => {
             const savedLogs = sessionStorage.getItem('adminLog');
