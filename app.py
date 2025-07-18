@@ -729,17 +729,20 @@ def get_transaction_report():
     
     try:
         data = request.json
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date')
         
-        if not start_date or not end_date: 
+        if not start_date_str or not end_date_str: 
             return jsonify({'error': '請提供開始與結束日期'}), 400
+        
+        # 【主要修改】將日期字串轉換為日期物件，並計算結束日期的隔天
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        end_date_exclusive = end_date + timedelta(days=1)
             
-        end_date_full = f"{end_date} 23:59:59"
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         
-        # 【主要修改】直接在 SQL 中計算好進貨價、出貨價和淨利
         query = """
             SELECT
                 t.id,
@@ -750,20 +753,20 @@ def get_transaction_report():
                 p.name,
                 t.barcode,
                 COALESCE(c.name, s.name, 'N/A') as partner_name,
-                -- 如果是進貨('IN')，進貨價就是交易價，否則為 0
                 CASE WHEN t.type = 'IN' THEN t.transaction_price ELSE 0 END AS purchase_price,
-                -- 如果是出貨('OUT')，出貨價就是交易價，否則為 0
                 CASE WHEN t.type = 'OUT' THEN t.transaction_price ELSE 0 END AS selling_price,
-                -- 如果是出貨('OUT')，計算淨利，否則為 0
                 CASE WHEN t.type = 'OUT' THEN (t.transaction_price - p.purchase_price) * t.quantity ELSE 0 END AS net_profit
             FROM transactions t
             LEFT JOIN products p ON t.barcode = p.barcode
             LEFT JOIN customers c ON t.customer_id = c.id
             LEFT JOIN suppliers s ON t.supplier_id = s.id
-            WHERE t.timestamp BETWEEN %s AND %s ORDER BY t.timestamp DESC
+            -- 【主要修改】使用 >= 和 < 來定義時間範圍，並讓資料庫處理時區轉換
+            WHERE t.timestamp AT TIME ZONE 'Asia/Taipei' >= %s 
+              AND t.timestamp AT TIME ZONE 'Asia/Taipei' < %s 
+            ORDER BY t.timestamp DESC
         """
         
-        cursor.execute(query, (start_date, end_date_full))
+        cursor.execute(query, (start_date, end_date_exclusive))
         transactions = cursor.fetchall()
         cursor.close()
         conn.close()
