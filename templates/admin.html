@@ -548,7 +548,7 @@ const addLog = (message, isError = false) => {
         });
 
         // 【主要修改】為登出按鈕增加清除日誌的功能
-        const logoutLink = document.querySelector('a[href="{{ url_for(\'logout\') }}"]');
+        const logoutLink = document.querySelector('a[href="{{ url_for('logout') }}"]');
         if(logoutLink) {
             logoutLink.addEventListener('click', () => {
                 sessionStorage.removeItem('adminLog');
