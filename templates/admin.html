@@ -154,7 +154,7 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- DOM Elements (無變動) ---
+        // --- DOM Elements ---
         const modeSelectionDiv = document.getElementById('mode-selection');
         const inboundModeDiv = document.getElementById('inbound-mode');
         const outboundOrderSelectionModeDiv = document.getElementById('outbound-order-selection-mode');
@@ -175,8 +175,7 @@
         const announcementText = document.getElementById('announcement-text');
         const saveAnnouncementBtn = document.getElementById('save-announcement-btn');
 
-
-        // --- App State (fulfillmentState 新增 adjustedPrices) ---
+        // --- App State ---
         let inboundState = {
             scanTimer: null,
             selectedSupplierId: null,
@@ -187,31 +186,30 @@
             scanTimer: null,
             currentOrder: null, 
             scannedItems: new Map(),
-            adjustedPrices: new Map() // 【主要修改】用來儲存調整後的價格
+            adjustedPrices: new Map()
         };
 
-// 【主要修改】升級 addLog 函式以使用 sessionStorage
-const addLog = (message, isError = false) => {
-    const now = new Date().toLocaleString('zh-TW', { hour12: false });
-    const color = isError ? 'text-red-400' : 'text-green-400';
-    const logEntryHTML = `<div><span class="${color}">[${now}]</span> ${message}</div>`;
+        // =================================================================
+        // 【修正】1. 將 addLog 函式獨立定義，使其職責單純
+        // =================================================================
+        const addLog = (message, isError = false) => {
+            const now = new Date().toLocaleString('zh-TW', { hour12: false });
+            const color = isError ? 'text-red-400' : 'text-green-400';
+            const logEntryHTML = `<div><span class="${color}">[${now}]</span> ${message}</div>`;
+            
+            logArea.innerHTML += logEntryHTML;
+            logArea.scrollTop = logArea.scrollHeight;
 
-    // 1. 更新畫面
-    logArea.innerHTML += logEntryHTML;
-    logArea.scrollTop = logArea.scrollHeight;
+            const currentLogs = sessionStorage.getItem('adminLog') || '';
+            sessionStorage.setItem('adminLog', currentLogs + logEntryHTML);
+        };
 
-    // 2. 將新的日誌內容存入 sessionStorage
-    // 先讀取舊的紀錄，再加上新的紀錄
-    const currentLogs = sessionStorage.getItem('adminLog') || '';
-    sessionStorage.setItem('adminLog', currentLogs + logEntryHTML);
-};
-        
+        // --- Other Functions ---
         const showView = (viewId) => {
             [modeSelectionDiv, inboundModeDiv, outboundOrderSelectionModeDiv, fulfillmentModeDiv].forEach(div => div.classList.add('hidden'));
             document.getElementById(viewId)?.classList.remove('hidden');
         };
 
-        // --- Announcement Functions (無變動) ---
         const loadAnnouncement = async () => {
             try {
                 const response = await fetch('/api/announcement');
@@ -219,7 +217,7 @@ const addLog = (message, isError = false) => {
                 const data = await response.json();
                 announcementText.value = data.announcement || '';
             } catch (error) {
-                addLog(error.message, true);
+                console.error(error.message); // 改為 console.error 避免循環呼叫 addLog
             }
         };
 
@@ -234,7 +232,6 @@ const addLog = (message, isError = false) => {
                 });
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.error);
-                
                 addLog(result.message);
                 alert(result.message);
             } catch (error) {
@@ -245,12 +242,11 @@ const addLog = (message, isError = false) => {
             }
         };
 
-        // --- Inbound Functions (無變動) ---
+        // --- Inbound Functions ---
         const loadSuppliers = async () => {
             supplierSelect.innerHTML = '<option value="">請選擇供應商...</option>';
             try {
-                const response = await fetch('/api/partners/suppliers');
-                const suppliers = await response.json();
+                const suppliers = await (await fetch('/api/partners/suppliers')).json();
                 suppliers.forEach(s => {
                     const option = document.createElement('option');
                     option.value = s.id;
@@ -265,8 +261,7 @@ const addLog = (message, isError = false) => {
         const loadCategories = async () => {
             inboundCategorySelect.innerHTML = '<option value="all">所有類別</option>';
             try {
-                const response = await fetch('/api/db/categories');
-                const categories = await response.json();
+                const categories = await (await fetch('/api/db/categories')).json();
                 categories.forEach(c => {
                     const option = document.createElement('option');
                     option.value = c.id;
@@ -328,57 +323,44 @@ const addLog = (message, isError = false) => {
             inboundBarcodeInp.disabled = true;
 
             try {
-                const response = await fetch(`/api/product/${barcode}`);
-                const product = await response.json();
-                if (!response.ok) throw new Error(product.error);
-
+                const product = await (await fetch(`/api/product/${barcode}`)).json();
                 if (inboundState.selectedCategoryId !== 'all' && product.category_id != inboundState.selectedCategoryId) {
                     throw new Error(`商品 '${product.name_chinese || product.name}' 不屬於所選的類別`);
                 }
-
                 if (inboundState.items.has(barcode)) {
-                    const item = inboundState.items.get(barcode);
-                    item.quantity++;
-                    lastScannedInbound.textContent = `+1: ${item.name_chinese || item.name}`;
+                    inboundState.items.get(barcode).quantity++;
+                    lastScannedInbound.textContent = `+1: ${product.name_chinese || product.name}`;
                 } else {
                     inboundState.items.set(barcode, { name: product.name, name_chinese: product.name_chinese, quantity: 1 });
                     lastScannedInbound.textContent = `新增: ${product.name_chinese || product.name}`;
                 }
                 renderInboundList();
                 document.getElementById(`inbound-row-${barcode}`)?.classList.add('flash-green');
-
             } catch (error) {
                 lastScannedInbound.textContent = `錯誤：${error.message}`;
                 addLog(`進貨掃描失敗：${error.message}`, true);
             } finally {
-                 inboundBarcodeInp.value = '';
+                inboundBarcodeInp.value = '';
                 inboundBarcodeInp.disabled = false;
                 inboundBarcodeInp.focus();
             }
         };
         
         const completeInbound = async () => {
-            if (!inboundState.selectedSupplierId || inboundState.items.size === 0) {
-                alert('請選擇供應商並掃描至少一項商品。');
-                return;
-            }
+            if (!inboundState.selectedSupplierId || inboundState.items.size === 0) return alert('請選擇供應商並掃描至少一項商品。');
             if (!confirm('確定要完成此批進貨嗎？庫存將會更新。')) return;
-
             const payload = {
                 type: 'IN',
                 partner_id: parseInt(inboundState.selectedSupplierId, 10),
                 items: Array.from(inboundState.items.entries()).map(([barcode, item]) => ({ barcode, quantity: item.quantity }))
             };
-
             try {
-                const response = await fetch('/api/transaction/batch', {
+                const result = await (await fetch('/api/transaction/batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error);
-                
+                })).json();
+                if (!result.success) throw new Error(result.error);
                 alert(result.message);
                 addLog(result.message);
                 showView('mode-selection');
@@ -388,9 +370,9 @@ const addLog = (message, isError = false) => {
             }
         };
 
-        // --- Outbound & Fulfillment Functions (有修改) ---
+        // --- Outbound & Fulfillment Functions ---
         const loadPendingOrders = async () => {
-            pendingOrdersTbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">載入中...</td></tr>'; // 【主要修改】colspan=5
+            pendingOrdersTbody.innerHTML = '<tr><td colspan="5" class="text-center p-4">載入中...</td></tr>';
             try {
                 const orders = await (await fetch('/api/pending_orders')).json();
                 pendingOrdersTbody.innerHTML = '';
@@ -404,7 +386,6 @@ const addLog = (message, isError = false) => {
                     row.dataset.orderId = order.id;
                     row.dataset.customerId = order.customer_id;
                     row.dataset.customerName = order.customer_name;
-                    // 【主要修改】顯示 total_amount
                     row.innerHTML = `
                         <td class="p-3 font-mono">#${order.id}</td>
                         <td class="p-3">${order.customer_name}</td>
@@ -428,12 +409,10 @@ const addLog = (message, isError = false) => {
                     items: new Map(details.map(item => [item.barcode, item]))
                 };
                 fulfillmentState.scannedItems.clear();
-                fulfillmentState.adjustedPrices.clear(); // 【主要修改】清空舊的價格紀錄
-                // 【主要修改】將原始價格存入 adjustedPrices
+                fulfillmentState.adjustedPrices.clear();
                 details.forEach(item => {
                     fulfillmentState.adjustedPrices.set(item.barcode, item.price_at_order);
                 });
-
                 fulfillmentTitle.textContent = `訂單 #${orderId} - ${customerName}`;
                 renderFulfillmentList();
                 showView('fulfillment-mode');
@@ -450,11 +429,9 @@ const addLog = (message, isError = false) => {
                 const scannedQty = fulfillmentState.scannedItems.get(barcode) || 0;
                 const isComplete = scannedQty >= item.required_quantity;
                 if (!isComplete) allItemsFulfilled = false;
-
                 const row = document.createElement('tr');
                 row.id = `fulfill-row-${barcode}`;
                 row.className = `border-b dark:border-gray-700 ${isComplete ? 'bg-green-100 dark:bg-green-900/50' : ''}`;
-                // 【主要修改】加入可編輯的價格輸入框
                 row.innerHTML = `
                     <td class="p-2">${item.name_chinese || item.name}</td>
                     <td class="p-2 font-mono">${barcode}</td>
@@ -474,7 +451,6 @@ const addLog = (message, isError = false) => {
         const handleFulfillmentScan = () => {
             const barcode = fulfillBarcodeInp.value.trim();
             if(!barcode) return;
-            
             const orderItems = fulfillmentState.currentOrder.items;
             if(!orderItems.has(barcode)){
                 lastScannedFulfill.textContent = '錯誤：此商品不在此訂單中！';
@@ -482,21 +458,17 @@ const addLog = (message, isError = false) => {
                 fulfillBarcodeInp.value = '';
                 return;
             }
-
             const itemInfo = orderItems.get(barcode);
             const scannedQty = fulfillmentState.scannedItems.get(barcode) || 0;
-
             if(scannedQty >= itemInfo.required_quantity) {
                 lastScannedFulfill.textContent = `警告：${itemInfo.name_chinese || itemInfo.name} 已揀貨完畢！`;
                 addLog(`警告：商品 ${barcode} 已達訂單數量`, true);
                 fulfillBarcodeInp.value = '';
                 return;
             }
-            
             fulfillmentState.scannedItems.set(barcode, scannedQty + 1);
             lastScannedFulfill.textContent = `已掃描: ${itemInfo.name_chinese || itemInfo.name}`;
             renderFulfillmentList();
-            
             const row = document.getElementById(`fulfill-row-${barcode}`);
             if (row) {
                 row.classList.add('flash-green');
@@ -507,8 +479,6 @@ const addLog = (message, isError = false) => {
 
         const completeFulfillment = async () => {
             if(!confirm(`確定要完成訂單 #${fulfillmentState.currentOrder.id} 的出貨作業嗎？`)) return;
-
-            // 【主要修改】建立 payload 時，包含調整後的價格
             const payload = {
                 order_id: fulfillmentState.currentOrder.id,
                 customer_id: fulfillmentState.currentOrder.customerId,
@@ -518,79 +488,55 @@ const addLog = (message, isError = false) => {
                     adjusted_price: fulfillmentState.adjustedPrices.get(barcode)
                 }))
             };
-            
             try {
-                const response = await fetch('/api/fulfill_order', {
+                const result = await (await fetch('/api/fulfill_order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                if(!response.ok) throw new Error(result.error || '出貨失敗');
-                
+                })).json();
+                if(!result.success) throw new Error(result.error || '出貨失敗');
                 alert(result.message);
                 addLog(result.message);
                 showView('mode-selection');
-
             } catch(error) {
                 alert(`出貨失敗：${error.message}`);
                 addLog(`出貨失敗：${error.message}`, true);
             }
         };
 
-        // --- Event Listeners (有新增) ---
+        // --- Event Listeners ---
         saveAnnouncementBtn.addEventListener('click', saveAnnouncement);
-
         document.getElementById('start-inbound-btn').addEventListener('click', startInbound);
         document.getElementById('start-outbound-btn').addEventListener('click', () => {
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
-
-        // 【主要修改】為登出按鈕增加清除日誌的功能
-        const logoutLink = document.querySelector('a[href="{{ url_for('logout') }}"]');
-        if(logoutLink) {
-            logoutLink.addEventListener('click', () => {
-                sessionStorage.removeItem('adminLog');
-            });
-        }
-
-        document.querySelectorAll('.back-to-selection-btn').forEach(btn => {
-            btn.addEventListener('click', () => showView('mode-selection'));
-        });
-        
+        document.querySelectorAll('.back-to-selection-btn').forEach(btn => btn.addEventListener('click', () => showView('mode-selection')));
         document.getElementById('back-to-order-list-btn').addEventListener('click', () => {
             loadPendingOrders();
             showView('outbound-order-selection-mode');
         });
-
-        // Inbound listeners (無變動)
         supplierSelect.addEventListener('change', () => {
             const selectedId = supplierSelect.value;
-            inboundState.selectedSupplierId = selectedId ? selectedId : null;
+            inboundState.selectedSupplierId = selectedId || null;
             const isSupplierSelected = !!selectedId;
             inboundCategorySelect.disabled = !isSupplierSelected;
             inboundBarcodeInp.disabled = !isSupplierSelected;
             inboundBarcodeInp.placeholder = isSupplierSelected ? '可以開始掃描商品' : '選擇供應商後開始掃描...';
-            if (isSupplierSelected) {
-                inboundBarcodeInp.focus();
-            }
+            if (isSupplierSelected) inboundBarcodeInp.focus();
             renderInboundList();
         });
-
         inboundCategorySelect.addEventListener('change', () => {
             inboundState.selectedCategoryId = inboundCategorySelect.value;
             addLog(`進貨類別已變更為: ${inboundCategorySelect.options[inboundCategorySelect.selectedIndex].text}`);
             inboundBarcodeInp.focus();
         });
-
         inboundBarcodeInp.addEventListener('input', () => {
             clearTimeout(inboundState.scanTimer);
             inboundState.scanTimer = setTimeout(() => {
                 if (inboundBarcodeInp.value.trim().length > 0) handleInboundScan();
             }, 200);
         });
-        
         inboundTbody.addEventListener('change', e => {
             if (e.target.classList.contains('inbound-quantity-input')) {
                 const barcode = e.target.dataset.barcode;
@@ -602,7 +548,6 @@ const addLog = (message, isError = false) => {
                 }
             }
         });
-
         inboundTbody.addEventListener('click', e => {
             const button = e.target.closest('button[data-action="remove-inbound-item"]');
             if (button) {
@@ -614,28 +559,21 @@ const addLog = (message, isError = false) => {
                 }
             }
         });
-
         completeInboundBtn.addEventListener('click', completeInbound);
-
-        // Outbound listeners
-        pendingOrdersTbody.addEventListener('click', (e) => {
+        pendingOrdersTbody.addEventListener('click', e => {
             const row = e.target.closest('.order-row');
             if (row) {
                 const { orderId, customerId, customerName } = row.dataset;
                 startFulfillment(orderId, customerId, customerName);
             }
         });
-
         fulfillBarcodeInp.addEventListener('input', () => {
             clearTimeout(fulfillmentState.scanTimer);
             fulfillmentState.scanTimer = setTimeout(() => {
                 if(fulfillBarcodeInp.value.trim().length > 0) handleFulfillmentScan();
             }, 200);
         });
-
         completeFulfillBtn.addEventListener('click', completeFulfillment);
-        
-        // 【主要修改】新增監聽價格變動的事件
         fulfillmentTbody.addEventListener('change', e => {
             if (e.target.classList.contains('price-input')) {
                 const barcode = e.target.dataset.barcode;
@@ -644,30 +582,33 @@ const addLog = (message, isError = false) => {
                     fulfillmentState.adjustedPrices.set(barcode, newPrice);
                     addLog(`商品 ${barcode} 價格已更新為 ${newPrice.toFixed(2)}`);
                 } else {
-                    // 如果輸入無效，恢復原價
                     e.target.value = fulfillmentState.adjustedPrices.get(barcode).toFixed(2);
                 }
             }
         });
+        const logoutLink = document.querySelector('a[href="{{ url_for(\'logout\') }}"]');
+        if(logoutLink) {
+            logoutLink.addEventListener('click', () => {
+                sessionStorage.removeItem('adminLog');
+            });
+        }
 
-        // --- Initial Load ---
+        // =================================================================
+        // 【修正】2. 這是頁面初始載入時唯一要執行的區塊
+        // =================================================================
+        const initPage = () => {
+            const savedLogs = sessionStorage.getItem('adminLog');
+            if (savedLogs) {
+                logArea.innerHTML = savedLogs;
+                logArea.scrollTop = logArea.scrollHeight;
+            } else {
+                addLog("管理系統已就緒，請選擇作業模式。");
+            }
+            loadAnnouncement();
+            lucide.createIcons();
+        };
 
-        // 【主要修改】新增載入日誌的邏輯
-       const loadLogs = () => {
-           const savedLogs = sessionStorage.getItem('adminLog');
-           if (savedLogs) {
-               logArea.innerHTML = savedLogs;
-               logArea.scrollTop = logArea.scrollHeight;
-           } else {
-               // 如果沒有儲存的日誌，才顯示初始訊息
-               addLog("管理系統已就緒，請選擇作業模式。");
-           }
-       };
-       loadLogs(); // 載入頁面時執行
-        
-        lucide.createIcons();
-        loadAnnouncement();
-        addLog("管理系統已就緒，請選擇作業模式。");
+        initPage();
     });
     </script>
 </body>
