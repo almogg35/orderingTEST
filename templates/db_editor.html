@@ -146,7 +146,7 @@
             const historyModal = document.getElementById('history_modal');
             const historyModalTitle = document.getElementById('history_modal_title');
             const historyModalBody = document.getElementById('history_modal_body');
-
+            
             // 【修正】加回條碼產生器相關的 DOM 元素
             const generateBarcodeBtn = document.getElementById('generate_barcode_btn');
             const downloadSvgBtn = document.getElementById('download_svg_btn');
@@ -218,7 +218,7 @@
                 container.innerHTML = `${addButtonHTML}<div class="overflow-x-auto bg-white dark:bg-gray-700 rounded-lg shadow"><table class="min-w-full text-left text-sm"><thead class="border-b dark:border-gray-600"><tr>${headers.map(h => `<th class="p-3 font-semibold">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
                 if (window.lucide) { window.lucide.createIcons(); }
             }
-
+            
             // 【修正】加回產生條碼的函式
             function generateAndDisplayBarcode() {
                 const prefix = "200";
@@ -281,7 +281,7 @@
                 addBarcode.value = ''; addNameChinese.value = ''; addName.value = '';
                 addPurchasePrice.value = '0.0'; addSellingPrice.value = '0.0';
                 populateCategorySelect(addCategoryId, null);
-                barcodeImage.innerHTML = ''; // 【修正】重置條碼顯示
+                barcodeImage.innerHTML = ''; // 重置條碼顯示
                 barcodeImageContainer.style.display = 'none';
                 downloadSvgBtn.disabled = true;
                 addProductModal.classList.remove('hidden');
@@ -449,6 +449,7 @@
                 await renderTable('suppliers');
             }
             loadInitialData();
+            lucide.createIcons();
         });
     </script>
 </body>
