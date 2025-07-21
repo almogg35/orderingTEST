@@ -39,6 +39,14 @@
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 space-y-8">
+
+                <div id="dashboard-summary" class="p-6 bg-white dark:bg-gray-700 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4 border-b pb-2 dark:border-gray-600">待辦事項提醒</h2>
+                    <div id="summary-content" class="space-y-4 text-gray-600 dark:text-gray-300">
+                        <p>載入中...</p>
+                    </div>
+                </div>
+                
                 <div class="p-6 bg-white dark:bg-gray-700 rounded-lg shadow-md">
                     
                     <div id="mode-selection">
@@ -174,6 +182,7 @@
         const completeInboundBtn = document.getElementById('complete-inbound-btn');
         const announcementText = document.getElementById('announcement-text');
         const saveAnnouncementBtn = document.getElementById('save-announcement-btn');
+        const summaryContent = document.getElementById('summary-content');
 
         // --- App State ---
         let inboundState = { scanTimer: null, selectedSupplierId: null, selectedCategoryId: 'all', items: new Map() };
@@ -225,6 +234,64 @@
                 alert(`儲存公告失敗: ${error.message}`);
             } finally {
                 saveAnnouncementBtn.disabled = false;
+            }
+        };
+
+        const loadDashboardSummary = async () => {
+            try {
+                const response = await fetch('/api/dashboard/summary');
+                if (!response.ok) {
+                    throw new Error('無法載入摘要資訊');
+                }
+                const data = await response.json();
+                let summaryHTML = '';
+                if (data.pending_orders_count > 0) {
+                    summaryHTML += `
+                        <div class="p-4 bg-yellow-100 dark:bg-yellow-900/50 border-l-4 border-yellow-500 rounded-r-lg">
+                            <div class="flex">
+                                <div class="py-1"><i data-lucide="mail" class="h-6 w-6 mr-4 text-yellow-700 dark:text-yellow-300"></i></div>
+                                <div>
+                                    <p class="font-bold text-yellow-800 dark:text-yellow-200">待出貨訂單</p>
+                                    <p class="text-sm">目前有 <strong class="text-lg">${data.pending_orders_count}</strong> 筆訂單需要進行出貨作業。</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                if (data.zero_stock_items.length > 0) {
+                    let itemsList = data.zero_stock_items.map(item => 
+                        `<li class="flex justify-between items-center text-sm py-1"><span class="truncate">${item.name_chinese || item.name}</span><span class="font-mono text-xs ml-4">${item.barcode}</span></li>`
+                    ).join('');
+                    summaryHTML += `
+                        <div class="p-4 bg-red-100 dark:bg-red-900/50 border-l-4 border-red-500 rounded-r-lg">
+                            <div class="flex">
+                                <div class="py-1"><i data-lucide="package-x" class="h-6 w-6 mr-4 text-red-700 dark:text-red-300"></i></div>
+                                <div>
+                                    <p class="font-bold text-red-800 dark:text-red-200">零庫存警告</p>
+                                    <p class="text-sm mb-2">以下 ${data.zero_stock_items.length} 項商品庫存為 0 或以下，請記得叫貨：</p>
+                                    <ul class="list-disc list-inside max-h-32 overflow-y-auto">${itemsList}</ul>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                if (summaryHTML === '') {
+                    summaryHTML = `
+                        <div class="p-4 bg-green-100 dark:bg-green-900/50 border-l-4 border-green-500 rounded-r-lg">
+                            <div class="flex">
+                                <div class="py-1"><i data-lucide="check-circle" class="h-6 w-6 mr-4 text-green-700 dark:text-green-300"></i></div>
+                                <div>
+                                    <p class="font-bold text-green-800 dark:text-green-200">系統狀態良好</p>
+                                    <p class="text-sm">目前沒有待處理訂單，所有商品庫存充足。</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                summaryContent.innerHTML = summaryHTML;
+                lucide.createIcons();
+            } catch (error) {
+                summaryContent.innerHTML = `<p class="text-red-500">${error.message}</p>`;
             }
         };
 
@@ -519,23 +586,22 @@
             showView('outbound-order-selection-mode');
         });
 
-        // Inbound Listeners
-        supplierSelect.addEventListener('change', () => {
-            const selectedId = supplierSelect.value;
+        supplierSelect.addEventListener('change', (e) => {
+            const selectedId = e.target.value;
             inboundState.selectedSupplierId = selectedId || null;
             const isSupplierSelected = !!selectedId;
             inboundCategorySelect.disabled = !isSupplierSelected;
             inboundBarcodeInp.disabled = !isSupplierSelected;
             inboundBarcodeInp.placeholder = isSupplierSelected ? '可以開始掃描商品' : '選擇供應商後開始掃描...';
             if (isSupplierSelected) {
-                addLog(`已選擇供應商: ${supplierSelect.options[supplierSelect.selectedIndex].text}`);
+                addLog(`已選擇供應商: ${e.target.options[e.target.selectedIndex].text}`);
                 inboundBarcodeInp.focus();
             }
             renderInboundList();
         });
-        inboundCategorySelect.addEventListener('change', () => {
-            inboundState.selectedCategoryId = inboundCategorySelect.value;
-            addLog(`進貨類別已變更為: ${inboundCategorySelect.options[inboundCategorySelect.selectedIndex].text}`);
+        inboundCategorySelect.addEventListener('change', (e) => {
+            inboundState.selectedCategoryId = e.target.value;
+            addLog(`進貨類別已變更為: ${e.target.options[e.target.selectedIndex].text}`);
             inboundBarcodeInp.focus();
         });
         inboundBarcodeInp.addEventListener('input', () => {
@@ -571,7 +637,6 @@
         });
         completeInboundBtn.addEventListener('click', completeInbound);
         
-        // Outbound Listeners
         pendingOrdersTbody.addEventListener('click', e => {
             const row = e.target.closest('.order-row');
             if (row) {
@@ -598,10 +663,7 @@
                 }
             }
         });
-
-        // =================================================================
-        // 【主要修改】為系統管理連結加上日誌記錄
-        // =================================================================
+        
         document.querySelectorAll('#management-links a').forEach(link => {
             link.addEventListener('click', () => {
                 addLog(`前往頁面: ${link.textContent.trim()}`);
@@ -626,6 +688,7 @@
                 addLog("管理系統已就緒，請選擇作業模式。");
             }
             loadAnnouncement();
+            loadDashboardSummary();
             lucide.createIcons();
         };
 
