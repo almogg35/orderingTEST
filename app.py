@@ -943,3 +943,36 @@ def get_product_history(barcode):
     finally:
         cursor.close()
         if conn: conn.close()
+
+# 請將此函式新增到 app.py 的最下方
+@app.route('/api/dashboard/summary', methods=['GET'])
+def get_dashboard_summary():
+    if session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    summary_data = {
+        'pending_orders_count': 0,
+        'zero_stock_items': []
+    }
+    try:
+        # 1. 查詢待處理訂單數量
+        cursor.execute("SELECT COUNT(*) as count FROM orders WHERE status = '待處理'")
+        pending_orders = cursor.fetchone()
+        if pending_orders:
+            summary_data['pending_orders_count'] = pending_orders['count']
+
+        # 2. 查詢庫存為 0 的商品
+        cursor.execute("SELECT barcode, name, name_chinese FROM products WHERE current_stock <= 0 ORDER BY name_chinese")
+        zero_stock_items = cursor.fetchall()
+        summary_data['zero_stock_items'] = [dict(item) for item in zero_stock_items]
+
+        return jsonify(summary_data)
+
+    except psycopg2.Error as e:
+        print(f"Dashboard summary fetch error: {e}")
+        return jsonify({'error': '查詢摘要資訊時發生資料庫錯誤'}), 500
+    finally:
+        cursor.close()
+        if conn: conn.close()
